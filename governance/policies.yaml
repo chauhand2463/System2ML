@@ -1,0 +1,37 @@
+policies:
+  - name: budget_limit
+    description: Enforce maximum budget per pipeline run
+    condition: "cost_usd <= budget"
+    action: allow
+  
+  - name: carbon_limit
+    description: Enforce carbon footprint limit
+    condition: "carbon_kg <= carbon_limit_kg"
+    action: allow
+  
+  - name: high_risk_approval
+    description: Require approval for production deployments
+    condition: "action == 'deploy_production'"
+    requires_approval: true
+  
+  - name: data_quality_gate
+    description: Fail pipeline if data quality below threshold
+    condition: "data_quality_score >= 0.8"
+    action: allow
+  
+  - name: drift_threshold
+    description: Trigger retraining if drift detected
+    condition: "drift_score <= 0.1"
+    action: allow
+
+risk_levels:
+  low:
+    - view_pipeline
+    - list_pipelines
+  medium:
+    - run_pipeline
+    - create_pipeline
+  high:
+    - deploy_production
+    - delete_pipeline
+    - modify_policy

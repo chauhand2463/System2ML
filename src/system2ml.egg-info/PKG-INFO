@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: system2ml
+Version: 0.1.0
+Summary: AI-driven ML pipeline design, execution, and optimization system
+Requires-Python: >=3.10
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: scikit-learn>=1.3.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: fastapi>=0.104.0
+Requires-Dist: uvicorn>=0.24.0
+Requires-Dist: loguru>=0.7.0
+Provides-Extra: ml
+Requires-Dist: mlflow>=2.8.0; extra == "ml"
+Requires-Dist: evidently>=0.4.0; extra == "ml"
+Provides-Extra: observability
+Requires-Dist: prometheus-client>=0.18.0; extra == "observability"
+Requires-Dist: codecarbon>=2.1.0; extra == "observability"
+Provides-Extra: storage
+Requires-Dist: sqlalchemy>=2.0.0; extra == "storage"
+Requires-Dist: redis>=5.0.0; extra == "storage"
+Provides-Extra: dev
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.7.0; extra == "dev"
+Requires-Dist: pytest>=7.4.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Provides-Extra: all
+Requires-Dist: mlflow>=2.8.0; extra == "all"
+Requires-Dist: evidently>=0.4.0; extra == "all"
+Requires-Dist: prometheus-client>=0.18.0; extra == "all"
+Requires-Dist: codecarbon>=2.1.0; extra == "all"
+Requires-Dist: sqlalchemy>=2.0.0; extra == "all"
+Requires-Dist: redis>=5.0.0; extra == "all"
