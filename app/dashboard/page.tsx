@@ -1,5 +1,5 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { TrendingUp, AlertCircle, Zap, CheckCircle2 } from 'lucide-react'
+import { TrendingUp, AlertCircle, Zap, CheckCircle2, Activity, ArrowUpRight, Play, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
@@ -51,95 +51,138 @@ export default async function DashboardPage() {
   const unresolvedFailures = failures.filter((f: any) => !f.is_resolved).length
   const successRate = runs.length > 0 ? ((completedRuns / runs.length) * 100).toFixed(1) : "0"
 
+  const stats = [
+    { 
+      label: 'Total Pipelines', 
+      value: totalPipelines, 
+      icon: Zap, 
+      color: 'from-brand-500 to-brand-600',
+      bgColor: 'bg-brand-500/10',
+      textColor: 'text-brand-400',
+      change: '+12%',
+      trend: 'up'
+    },
+    { 
+      label: 'Success Rate', 
+      value: `${successRate}%`, 
+      icon: CheckCircle2, 
+      color: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-500/10',
+      textColor: 'text-emerald-400',
+      change: '+5%',
+      trend: 'up'
+    },
+    { 
+      label: 'Active Failures', 
+      value: unresolvedFailures, 
+      icon: AlertCircle, 
+      color: 'from-red-500 to-red-600',
+      bgColor: 'bg-red-500/10',
+      textColor: 'text-red-400',
+      change: '-3%',
+      trend: 'down'
+    },
+    { 
+      label: 'Avg Accuracy', 
+      value: `${((metrics?.avg_accuracy || 0) * 100).toFixed(1)}%`, 
+      icon: TrendingUp, 
+      color: 'from-purple-500 to-purple-600',
+      bgColor: 'bg-purple-500/10',
+      textColor: 'text-purple-400',
+      change: '+8%',
+      trend: 'up'
+    },
+  ]
+
   return (
     <DashboardLayout>
-      <div className="p-8">
-        {/* Page Header */}
+      <div className="p-8 min-h-screen">
+        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
-            <p className="text-neutral-400">Overview of your ML pipelines and operations</p>
+            <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
+            <p className="text-neutral-400">Here's what's happening with your ML pipelines</p>
           </div>
           <Link href="/pipelines/new">
-            <Button className="bg-brand-500 hover:bg-brand-600 text-white">
+            <Button className="bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white shadow-lg shadow-brand-500/25">
+              <Play className="w-4 h-4 mr-2" />
               Design New Pipeline
             </Button>
           </Link>
         </div>
 
-        {/* KPI Grid */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-brand-500/10 flex items-center justify-center">
-                <Zap className="w-6 h-6 text-brand-500" />
+          {stats.map((stat, i) => {
+            const Icon = stat.icon
+            return (
+              <div 
+                key={i}
+                className="relative group overflow-hidden rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6 hover:border-brand-500/30 transition-all duration-500 hover:scale-[1.02]"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-brand-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+                
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg`}>
+                      <Icon className="w-6 h-6 text-white" />
+                    </div>
+                    <div className={`flex items-center gap-1 text-xs font-medium ${stat.trend === 'up' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {stat.change}
+                      <ArrowUpRight className="w-3 h-3" />
+                    </div>
+                  </div>
+                  <p className="text-neutral-400 text-sm mb-1">{stat.label}</p>
+                  <p className="text-3xl font-bold text-white">{stat.value}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-neutral-400 text-sm">Total Pipelines</p>
-                <p className="text-2xl font-bold text-white">{totalPipelines}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-success-500/10 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6 text-success-500" />
-              </div>
-              <div>
-                <p className="text-neutral-400 text-sm">Success Rate</p>
-                <p className="text-2xl font-bold text-white">{successRate}%</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-danger-500/10 flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-danger-500" />
-              </div>
-              <div>
-                <p className="text-neutral-400 text-sm">Failures</p>
-                <p className="text-2xl font-bold text-white">{unresolvedFailures}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-info-500/10 flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-info-500" />
-              </div>
-              <div>
-                <p className="text-neutral-400 text-sm">Avg Accuracy</p>
-                <p className="text-2xl font-bold text-white">{((metrics?.avg_accuracy || 0) * 100).toFixed(1)}%</p>
-              </div>
-            </div>
-          </div>
+            )
+          })}
         </div>
 
-        {/* Main Content Grid */}
+        {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Activity Timeline */}
+          {/* Activity */}
           <div className="lg:col-span-2">
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-              <h2 className="text-lg font-bold text-white mb-6">Recent Activity</h2>
+            <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold text-white">Recent Activity</h2>
+                <Link href="/runs" className="text-sm text-brand-400 hover:text-brand-300 flex items-center gap-1">
+                  View all <ArrowUpRight className="w-4 h-4" />
+                </Link>
+              </div>
+              
               <div className="space-y-4">
                 {activities.length === 0 ? (
-                  <p className="text-neutral-500">No recent activity</p>
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 rounded-2xl bg-neutral-800/50 flex items-center justify-center mx-auto mb-4">
+                      <Activity className="w-8 h-8 text-neutral-600" />
+                    </div>
+                    <p className="text-neutral-500">No recent activity</p>
+                    <Link href="/pipelines/new">
+                      <Button variant="outline" className="mt-4 border-neutral-700">
+                        Create your first pipeline
+                      </Button>
+                    </Link>
+                  </div>
                 ) : (
-                  activities.slice(0, 6).map((activity: any, i: number) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-brand-500/10 flex items-center justify-center flex-shrink-0">
-                        <Zap className="w-4 h-4 text-brand-500" />
+                  activities.slice(0, 5).map((activity: any, i: number) => (
+                    <div 
+                      key={i} 
+                      className="flex items-center gap-4 p-4 rounded-xl bg-neutral-800/30 hover:bg-neutral-800/50 border border-white/5 transition-all duration-300 group"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                        <Zap className="w-5 h-5 text-brand-400" />
                       </div>
-                      <div className="flex-1">
-                        <p className="text-white font-medium">{activity.title}</p>
-                        <p className="text-neutral-500 text-sm">{activity.description}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium truncate">{activity.title}</p>
+                        <p className="text-neutral-500 text-sm truncate">{activity.description}</p>
                       </div>
-                      <span className="text-neutral-500 text-xs">
+                      <div className="flex items-center gap-1 text-neutral-500 text-xs">
+                        <Clock className="w-3 h-3" />
                         {new Date(activity.created_at).toLocaleTimeString()}
-                      </span>
+                      </div>
                     </div>
                   ))
                 )}
@@ -147,55 +190,65 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* Quick Stats */}
+          {/* Sidebar */}
           <div className="space-y-6">
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+            {/* Pipeline Status */}
+            <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
               <h2 className="text-lg font-bold text-white mb-4">Pipeline Status</h2>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-400">Active</span>
-                  <span className="text-success-500 font-medium">{activePipelines}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-400">Designed</span>
-                  <span className="text-brand-500 font-medium">{designedPipelines}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-400">Total Runs</span>
-                  <span className="text-white font-medium">{runs.length}</span>
-                </div>
+              <div className="space-y-4">
+                {[
+                  { label: 'Active', value: activePipelines, color: 'bg-emerald-500', width: `${(activePipelines / Math.max(totalPipelines, 1)) * 100}%` },
+                  { label: 'Designed', value: designedPipelines, color: 'bg-brand-500', width: `${(designedPipelines / Math.max(totalPipelines, 1)) * 100}%` },
+                  { label: 'Total Runs', value: runs.length, color: 'bg-purple-500', width: '100%' },
+                ].map((item, i) => (
+                  <div key={i}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-neutral-400 text-sm">{item.label}</span>
+                      <span className="text-white font-semibold">{item.value}</span>
+                    </div>
+                    <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${item.color} rounded-full transition-all duration-1000`} 
+                        style={{ width: item.width }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+            {/* Metrics */}
+            <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
               <h2 className="text-lg font-bold text-white mb-4">Average Metrics</h2>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-400">Accuracy</span>
-                  <span className="text-white font-medium">{((metrics?.avg_accuracy || 0) * 100).toFixed(1)}%</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-400">Cost</span>
-                  <span className="text-white font-medium">${(metrics?.avg_cost || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-neutral-400">Carbon</span>
-                  <span className="text-white font-medium">{(metrics?.avg_carbon || 0).toFixed(3)} kg</span>
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Accuracy', value: `${((metrics?.avg_accuracy || 0) * 100).toFixed(1)}%`, color: 'text-emerald-400' },
+                  { label: 'Cost', value: `$${(metrics?.avg_cost || 0).toFixed(2)}`, color: 'text-amber-400' },
+                  { label: 'Carbon', value: `${(metrics?.avg_carbon || 0).toFixed(3)}kg`, color: 'text-cyan-400' },
+                  { label: 'Latency', value: `${(metrics?.avg_latency || 0).toFixed(0)}ms`, color: 'text-purple-400' },
+                ].map((metric, i) => (
+                  <div key={i} className="p-4 rounded-xl bg-neutral-800/30 border border-white/5">
+                    <p className="text-neutral-500 text-xs mb-1">{metric.label}</p>
+                    <p className={`text-xl font-bold ${metric.color}`}>{metric.value}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+            {/* Quick Actions */}
+            <div className="rounded-2xl bg-gradient-to-br from-brand-500/10 to-purple-500/10 border border-brand-500/20 p-6">
               <h2 className="text-lg font-bold text-white mb-4">Quick Actions</h2>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Link href="/pipelines/new" className="block">
-                  <Button variant="outline" className="w-full border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+                  <Button className="w-full bg-brand-500 hover:bg-brand-600 justify-start gap-2">
+                    <Zap className="w-4 h-4" />
                     Design Pipeline
                   </Button>
                 </Link>
-                <Link href="/pipelines" className="block">
-                  <Button variant="outline" className="w-full border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-                    View Pipelines
+                <Link href="/design-agent" className="block">
+                  <Button variant="outline" className="w-full border-neutral-700 justify-start gap-2">
+                    <Activity className="w-4 h-4" />
+                    AI Design Agent
                   </Button>
                 </Link>
               </div>

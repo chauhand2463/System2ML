@@ -135,7 +135,7 @@ export default function LandingPage() {
                   Sign In
                 </Button>
               </Link>
-              <Link href="/dashboard">
+              <Link href="/login">
                 <Button className="bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white border-0 shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all duration-300">
                   Get Started <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>
@@ -162,7 +162,7 @@ export default function LandingPage() {
                   <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
                     <Button variant="outline" className="w-full">Sign In</Button>
                   </Link>
-                  <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                  <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
                     <Button className="w-full bg-gradient-to-r from-brand-500 to-brand-600">Get Started</Button>
                   </Link>
                 </div>
@@ -345,7 +345,7 @@ export default function LandingPage() {
               <p className="text-neutral-400 text-sm md:text-xl mb-8 md:mb-10 max-w-xl mx-auto">
                 Join thousands of teams designing ML pipelines with AI-powered constraint validation
               </p>
-              <Link href="/dashboard">
+              <Link href="/login">
                 <Button size="xl" className="w-full sm:w-auto h-12 md:h-14 px-8 md:px-10 text-base md:text-lg bg-white text-neutral-900 hover:bg-neutral-100 border-0 shadow-xl transition-all duration-300 hover:scale-105 font-semibold">
                   Get Started Free
                 </Button>

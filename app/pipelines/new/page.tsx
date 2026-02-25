@@ -45,16 +45,26 @@ export default function NewPipelinePage() {
 
   return (
     <DashboardLayout>
-      <div className="p-8 max-w-4xl mx-auto">
+      <div className="p-8 max-w-4xl mx-auto min-h-screen">
+        {/* Header */}
         <div className="mb-8">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm mb-4">
+            <Zap className="w-4 h-4" />
+            Create New Pipeline
+          </div>
           <h1 className="text-3xl font-bold text-white mb-2">Design New Pipeline</h1>
           <p className="text-neutral-400">Configure your ML pipeline with constraints</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Basic Info */}
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-            <h2 className="text-lg font-bold text-white mb-4">Basic Information</h2>
+          <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-brand-400" />
+              </div>
+              Basic Information
+            </h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-2">
@@ -65,7 +75,7 @@ export default function NewPipelinePage() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="My ML Pipeline"
-                  className="w-full px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all"
                 />
               </div>
               
@@ -105,8 +115,13 @@ export default function NewPipelinePage() {
           </div>
 
           {/* Constraints */}
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-            <h2 className="text-lg font-bold text-white mb-4">Constraints</h2>
+          <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-amber-400" />
+              </div>
+              Constraints
+            </h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-2">
@@ -160,8 +175,13 @@ export default function NewPipelinePage() {
           </div>
 
           {/* Deployment */}
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
-            <h2 className="text-lg font-bold text-white mb-4">Deployment</h2>
+          <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-purple-400" />
+              </div>
+              Deployment
+            </h2>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-2">
@@ -198,7 +218,7 @@ export default function NewPipelinePage() {
           <Button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-500 hover:bg-brand-600 text-white py-3"
+            className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white py-4 text-lg font-semibold shadow-lg shadow-brand-500/25"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />

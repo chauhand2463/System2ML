@@ -1,47 +1,113 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { use } from 'react'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { PipelineDesigner } from '@/components/pipelines/pipeline-designer'
+import { PipelineDesigner, PipelineNode, PipelineEdge } from '@/components/pipelines/pipeline-designer'
 import { fetchPipelineById, fetchPipelineRuns } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { ArrowLeft, Play, BookOpen } from 'lucide-react'
-import { notFound } from 'next/navigation'
+import { ArrowLeft, Play, BookOpen, Loader2, Save } from 'lucide-react'
 
-export default async function PipelineDetailPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const pipeline = await fetchPipelineById(params.id)
+interface PipelinePageProps {
+  params: Promise<{ id: string }>
+}
 
-  if (!pipeline) {
-    notFound()
+export default function PipelineDetailPage({ params }: PipelinePageProps) {
+  const { id } = use(params)
+  
+  const [pipeline, setPipeline] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [nodes, setNodes] = useState<PipelineNode[]>([])
+  const [edges, setEdges] = useState<PipelineEdge[]>([])
+  const [latestRun, setLatestRun] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const data = await fetchPipelineById(id)
+        setPipeline(data.pipeline)
+        
+        if (data.pipeline?.designs?.length > 0) {
+          const design = data.pipeline.designs[0]
+          if (design.pipeline) {
+            setNodes(design.pipeline.nodes || [])
+            setEdges(design.pipeline.edges || [])
+          }
+        }
+        
+        const runsData = await fetchPipelineRuns(id)
+        setLatestRun(runsData[0])
+      } catch (e) {
+        console.error('Error loading pipeline:', e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [id])
+
+  const handleSavePipeline = async (newNodes: PipelineNode[], newEdges: PipelineEdge[]) => {
+    setSaving(true)
+    try {
+      // In a real app, you'd save to backend
+      console.log('Saving pipeline:', { nodes: newNodes, edges: newEdges })
+      setNodes(newNodes)
+      setEdges(newEdges)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    } finally {
+      setSaving(false)
+    }
   }
-
-  const runs = await fetchPipelineRuns(pipeline.id)
-  const latestRun = runs[0]
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'success':
-        return 'bg-success-500/10 text-success-600'
-      case 'failed':
-        return 'bg-danger-500/10 text-danger-600'
+      case 'active':
+        return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+      case 'designed':
+        return 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
       case 'running':
-        return 'bg-info-500/10 text-info-600'
+        return 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+      case 'failed':
+        return 'bg-red-500/10 text-red-400 border border-red-500/20'
       default:
-        return 'bg-neutral-600/10 text-neutral-400'
+        return 'bg-neutral-700/10 text-neutral-400 border border-neutral-700/20'
     }
+  }
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-screen">
+          <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (!pipeline) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center h-screen">
+          <p className="text-neutral-500 mb-4">Pipeline not found</p>
+          <Link href="/pipelines">
+            <Button>Back to Pipelines</Button>
+          </Link>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
     <DashboardLayout>
-      <div className="p-8 flex flex-col h-full overflow-hidden">
+      <div className="p-8 flex flex-col h-screen overflow-hidden">
         {/* Header */}
-        <div className="mb-6">
+        <div className="mb-6 flex-shrink-0">
           <Link
             href="/pipelines"
-            className="flex items-center gap-2 text-neutral-400 hover:text-white mb-4 transition-colors"
+            className="flex items-center gap-2 text-neutral-400 hover:text-white mb-4 transition-colors text-sm"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Pipelines
@@ -49,11 +115,16 @@ export default async function PipelineDetailPage({
 
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">{pipeline.name}</h1>
-              <p className="text-neutral-400">{pipeline.description}</p>
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-3xl font-bold text-white">{pipeline.name}</h1>
+                <Badge className={getStatusColor(pipeline.status || 'draft')}>
+                  {(pipeline.status || 'draft').charAt(0).toUpperCase() + (pipeline.status || 'draft').slice(1)}
+                </Badge>
+              </div>
+              <p className="text-neutral-400">{pipeline.description || 'Custom ML Pipeline'}</p>
             </div>
             <div className="flex gap-3">
-              {pipeline.status === 'draft' && (
+              {pipeline.status === 'designed' && (
                 <Button className="bg-brand-500 hover:bg-brand-600 text-white gap-2">
                   <Play className="w-4 h-4" />
                   Deploy
@@ -70,24 +141,38 @@ export default async function PipelineDetailPage({
           </div>
 
           <div className="flex items-center gap-4 mt-4 text-sm">
-            <Badge className={getStatusColor(pipeline.status || 'draft')}>
-              {((pipeline.status) || 'draft').charAt(0).toUpperCase() + (pipeline.status || 'draft').slice(1)}
-            </Badge>
-            <span className="text-neutral-400">v{pipeline.version}</span>
+            <span className="text-neutral-500">v{pipeline.version || '1.0'}</span>
             {latestRun && (
               <>
+                <span className="text-neutral-600">•</span>
                 <span className="text-neutral-400">Last run:</span>
                 <Badge className={getStatusColor(latestRun.status)}>
-                  {latestRun.status.charAt(0).toUpperCase() + latestRun.status.slice(1)}
+                  {latestRun.status}
                 </Badge>
+              </>
+            )}
+            {pipeline.constraints && (
+              <>
+                <span className="text-neutral-600">•</span>
+                <span className="text-neutral-400">
+                  Budget: ${pipeline.constraints.max_cost_usd}
+                </span>
+                <span className="text-neutral-600">|</span>
+                <span className="text-neutral-400">
+                  Carbon: {pipeline.constraints.max_carbon_kg}kg
+                </span>
               </>
             )}
           </div>
         </div>
 
         {/* Designer Canvas */}
-        <div className="flex-1 min-h-0">
-          <PipelineDesigner pipeline={pipeline} />
+        <div className="flex-1 min-h-0 pb-6">
+          <PipelineDesigner 
+            initialNodes={nodes}
+            initialEdges={edges}
+            onSave={handleSavePipeline}
+          />
         </div>
       </div>
     </DashboardLayout>

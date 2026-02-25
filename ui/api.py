@@ -14,7 +14,7 @@ import json
 from agent.planner import DesignAgent, ConstraintSpec
 from ui.database import PipelineStore, DesignStore, RunStore, ActivityStore, FailureStore
 
-app = FastAPI(title="System2ML API", version="0.1.0")
+app = FastAPI(title="System2ML API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,7 +50,7 @@ class DesignRequest(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "System2ML API", "version": "0.1.0"}
+    return {"message": "System2ML API", "version": "0.2.0"}
 
 
 @app.get("/health")
@@ -168,75 +168,81 @@ def execute_pipeline(pipeline_id: str):
     
     accuracy = random.uniform(0.75, 0.95)
     f1 = random.uniform(0.70, 0.92)
-    cost = random.uniform(1, 15)
-    carbon = random.uniform(0.1, 1.5)
+    cost = random.uniform(0.5, 5.0)
+    carbon = random.uniform(0.01, 0.5)
     
-    metrics = {
-        "accuracy": round(accuracy, 4),
-        "f1": round(f1, 4),
-        "cost_usd": round(cost, 2),
-        "carbon_kg": round(carbon, 3),
-    }
+    RunStore.update(
+        run_id,
+        status="completed",
+        metrics={
+            "accuracy": accuracy,
+            "f1": f1,
+            "cost": cost,
+            "carbon": carbon,
+        }
+    )
     
-    RunStore.update_status(run_id, "completed", metrics=metrics)
     PipelineStore.update_status(pipeline_id, "active")
     
     ActivityStore.log(
         type_="deployment",
         title=f"Pipeline '{pipeline['name']}' completed successfully",
-        description=f"Accuracy: {metrics['accuracy']:.2%}, Cost: ${metrics['cost_usd']:.2f}",
+        description=f"Run ID: {run_id} - Accuracy: {accuracy:.2%}",
         severity="low"
     )
     
-    return {"run_id": run_id, "status": "completed", "metrics": metrics}
+    return {
+        "run_id": run_id,
+        "pipeline_id": pipeline_id,
+        "status": "completed",
+        "metrics": {
+            "accuracy": accuracy,
+            "f1": f1,
+            "cost": cost,
+            "carbon": carbon,
+        }
+    }
 
 
 @app.get("/api/runs")
 def list_runs():
     runs = RunStore.get_all()
-    for r in runs:
-        if r.get('metrics'):
-            r['metrics'] = json.loads(r['metrics']) if isinstance(r['metrics'], str) else r['metrics']
     return {"runs": runs}
 
 
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: str):
-    runs = RunStore.get_all()
-    for r in runs:
-        if r.get('id') == run_id:
-            if r.get('metrics'):
-                r['metrics'] = json.loads(r['metrics']) if isinstance(r['metrics'], str) else r['metrics']
-            return r
-    raise HTTPException(status_code=404, detail="Run not found")
+    run = RunStore.get_by_id(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {"run": run}
 
 
 @app.get("/api/metrics")
 def get_metrics():
+    pipelines = PipelineStore.get_all()
     runs = RunStore.get_all()
-    completed = [r for r in runs if r.get('status') == 'completed']
     
-    if not completed:
-        return {"total_runs": 0, "avg_accuracy": 0, "avg_cost": 0, "avg_carbon": 0}
+    total_pipelines = len(pipelines)
+    active_pipelines = len([p for p in pipelines if p.get('status') == 'active'])
     
-    accuracies = []
-    costs = []
-    carbons = []
+    completed_runs = [r for r in runs if r.get('status') == 'completed']
+    total_runs = len(runs)
     
-    for r in completed:
-        m = r.get('metrics', {})
-        if isinstance(m, str):
-            m = json.loads(m)
-        if m:
-            accuracies.append(m.get('accuracy', 0))
-            costs.append(m.get('cost_usd', 0))
-            carbons.append(m.get('carbon_kg', 0))
+    avg_accuracy = sum(r.get('metrics', {}).get('accuracy', 0) for r in completed_runs) / max(len(completed_runs), 1)
+    avg_cost = sum(r.get('metrics', {}).get('cost', 0) for r in completed_runs) / max(len(completed_runs), 1)
+    avg_carbon = sum(r.get('metrics', {}).get('carbon', 0) for r in completed_runs) / max(len(completed_runs), 1)
+    avg_latency = random.uniform(50, 500)
     
     return {
-        "total_runs": len(completed),
-        "avg_accuracy": round(sum(accuracies) / len(accuracies), 4) if accuracies else 0,
-        "avg_cost": round(sum(costs) / len(costs), 2) if costs else 0,
-        "avg_carbon": round(sum(carbons) / len(carbons), 3) if carbons else 0,
+        "total_pipelines": total_pipelines,
+        "active_pipelines": active_pipelines,
+        "total_runs": total_runs,
+        "completed_runs": len(completed_runs),
+        "avg_accuracy": avg_accuracy,
+        "avg_cost": avg_cost,
+        "avg_carbon": avg_carbon,
+        "avg_latency": avg_latency,
     }
 
 
@@ -260,6 +266,555 @@ def list_predefined():
             {"name": "image_classification", "description": "Image classification", "data_type": "image"},
             {"name": "timeseries_forecast", "description": "Time series forecasting", "data_type": "time-series"},
         ]
+    }
+
+
+# ============================================
+# VALIDATION & FEASIBILITY ENDPOINTS
+# ============================================
+
+@app.post("/api/validate")
+def validate_constraints(request: dict):
+    """Validate user input constraints before design"""
+    constraints = request.get("constraints", {})
+    violations = []
+    suggestions = []
+    
+    max_cost = constraints.get("max_cost_usd", 10)
+    max_carbon = constraints.get("max_carbon_kg", 1.0)
+    max_latency = constraints.get("max_latency_ms", 200)
+    deployment = request.get("deployment", "batch")
+    
+    if max_cost < 0.1:
+        violations.append({
+            "constraint": "max_cost_usd",
+            "value": max_cost,
+            "required": 0.1,
+            "severity": "hard",
+            "message": "Cost must be at least $0.10"
+        })
+    
+    if max_cost < 5 and deployment == "realtime":
+        violations.append({
+            "constraint": "max_cost_usd",
+            "value": max_cost,
+            "required": 5.0,
+            "severity": "hard",
+            "message": "Real-time deployment requires at least $5 budget"
+        })
+    
+    if max_cost < 1:
+        suggestions.append({
+            "constraint": "max_cost_usd",
+            "current_value": max_cost,
+            "suggested_value": 5.0,
+            "reason": "Accuracy optimization typically requires more compute",
+            "priority": 1
+        })
+    
+    feasibility_score = 1.0 - (len(violations) * 0.3)
+    
+    return {
+        "is_valid": len([v for v in violations if v["severity"] == "hard"]) == 0,
+        "violations": violations,
+        "suggestions": suggestions,
+        "feasibility_score": max(0.0, feasibility_score),
+    }
+
+
+@app.post("/api/feasibility/policy")
+def get_feasibility_policy(request: dict):
+    """Generate feasibility policy based on constraints"""
+    constraints = request.get("constraints", {})
+    deployment = request.get("deployment", "batch")
+    compliance = constraints.get("compliance_level", "standard")
+    
+    eligible = ["classical", "small_deep", "compressed"]
+    
+    if compliance in ["regulated", "highly_regulated"]:
+        eligible = ["classical", "compressed"]
+    elif deployment != "edge":
+        eligible.append("transformer")
+    
+    return {
+        "request_id": str(uuid.uuid4()),
+        "eligible_model_families": eligible,
+        "hard_constraints": ["max_cost_usd", "max_carbon_kg"] + 
+                           (["max_latency_ms"] if deployment == "realtime" else []),
+        "soft_constraints": ["min_accuracy", "max_latency_ms"],
+        "required_monitors": ["cost", "latency"] + 
+                           (["carbon"] if constraints.get("max_carbon_kg", 1) < 1 else []),
+    }
+
+
+@app.post("/api/feasibility/generate")
+def generate_pipeline_candidates(request: dict):
+    """Generate pipeline candidates based on constraints"""
+    constraints = request.get("constraints", {})
+    max_cost = constraints.get("max_cost_usd", 10)
+    max_carbon = constraints.get("max_carbon_kg", 1.0)
+    max_latency = constraints.get("max_latency_ms", 200)
+    
+    profiles = {
+        "classical": {"cost": 0.5, "carbon": 0.01, "latency": 100, "accuracy": 0.82},
+        "small_deep": {"cost": 2.0, "carbon": 0.1, "latency": 500, "accuracy": 0.88},
+        "compressed": {"cost": 0.8, "carbon": 0.03, "latency": 200, "accuracy": 0.85},
+        "transformer": {"cost": 8.0, "carbon": 0.5, "latency": 2000, "accuracy": 0.95},
+    }
+    
+    candidates = []
+    for family, p in profiles.items():
+        violates = []
+        if p["cost"] > max_cost:
+            violates.append({"constraint": "max_cost_usd", "message": f"${p['cost']} exceeds ${max_cost}"})
+        if p["carbon"] > max_carbon:
+            violates.append({"constraint": "max_carbon_kg", "message": f"{p['carbon']}kg exceeds {max_carbon}kg"})
+        if p["latency"] > max_latency:
+            violates.append({"constraint": "max_latency_ms", "message": f"{p['latency']}ms exceeds {max_latency}ms"})
+        
+        candidates.append({
+            "id": str(uuid.uuid4()),
+            "name": f"{family.title()} ML Pipeline",
+            "description": f"Pipeline using {family} models",
+            "model_families": [family],
+            "estimated_cost": p["cost"],
+            "estimated_carbon": p["carbon"],
+            "estimated_latency_ms": p["latency"],
+            "estimated_accuracy": p["accuracy"],
+            "violates_constraints": violates,
+        })
+    
+    feasible = [c for c in candidates if not c["violates_constraints"]]
+    return {"candidates": candidates, "feasible_count": len(feasible), "total_count": len(candidates)}
+
+
+@app.post("/api/safety/validate-execution")
+def validate_execution(request: dict):
+    """Validate pipeline for safe execution"""
+    constraints = request.get("constraints", {})
+    pipeline = request.get("pipeline", {})
+    
+    max_cost = constraints.get("max_cost_usd", 10)
+    max_carbon = constraints.get("max_carbon_kg", 1.0)
+    max_latency = constraints.get("max_latency_ms", 200)
+    
+    est_cost = pipeline.get("estimated_cost", 0)
+    est_carbon = pipeline.get("estimated_carbon", 0)
+    est_latency = pipeline.get("estimated_latency_ms", 0)
+    
+    violations = []
+    warnings = []
+    
+    if est_cost > max_cost:
+        violations.append({"constraint": "max_cost_usd", "message": f"${est_cost:.2f} exceeds ${max_cost}", "severity": "hard"})
+    if est_carbon > max_carbon:
+        violations.append({"constraint": "max_carbon_kg", "message": f"{est_carbon:.4f}kg exceeds {max_carbon}kg", "severity": "hard"})
+    if est_latency > max_latency:
+        violations.append({"constraint": "max_latency_ms", "message": f"{est_latency}ms exceeds {max_latency}ms", "severity": "hard"})
+    
+    if est_cost > max_cost * 0.8:
+        warnings.append({"type": "cost_warning", "message": f"Cost uses {est_cost/max_cost:.0%} of budget"})
+    
+    can_execute = len(violations) == 0 or request.get("force", False)
+    return {"can_execute": can_execute, "violations": violations, "warnings": warnings}
+
+
+@app.get("/api/eligibility/matrix")
+def get_eligibility_matrix():
+    """Get the model eligibility matrix"""
+    return {
+        "model_families": [
+            {"family": "classical", "name": "Classical ML", "description": "Random Forest, XGBoost",
+             "cost_range": [0.1, 2.0], "carbon_per_run": 0.01, "latency_ms": 100, "accuracy_range": [0.6, 0.85], "requires_gpu": False},
+            {"family": "small_deep", "name": "Small Deep Learning", "description": "Lightweight neural networks",
+             "cost_range": [0.5, 10.0], "carbon_per_run": 0.1, "latency_ms": 500, "accuracy_range": [0.75, 0.92], "requires_gpu": True},
+            {"family": "compressed", "name": "Compressed/Quantized", "description": "Optimized for efficiency",
+             "cost_range": [0.2, 3.0], "carbon_per_run": 0.03, "latency_ms": 200, "accuracy_range": [0.7, 0.88], "requires_gpu": False},
+            {"family": "transformer", "name": "Transformer Models", "description": "BERT, GPT, ViT",
+             "cost_range": [3.0, 50.0], "carbon_per_run": 0.5, "latency_ms": 2000, "accuracy_range": [0.85, 0.98], "requires_gpu": True},
+        ]
+    }
+
+
+# ============================================
+# DATASET PROFILING ENDPOINTS
+# ============================================
+
+class DatasetProfileRequest(BaseModel):
+    source: Literal["upload", "connection", "existing"]
+    file_name: Optional[str] = None
+    file_type: Optional[Literal["csv", "parquet", "json", "image", "text"]] = None
+    file_size_mb: Optional[float] = None
+    dataset_id: Optional[str] = None
+    connection_config: Optional[dict] = None
+
+
+class DatasetProfile(BaseModel):
+    id: str
+    name: str
+    source: str
+    type: str
+    size_mb: float
+    rows: Optional[int] = None
+    columns: Optional[int] = None
+    features: Optional[int] = None
+    label_type: Optional[str] = None
+    label_present: bool
+    missing_values: float
+    missing_percentage: float
+    class_balance: Optional[dict] = None
+    pii_detected: bool
+    pii_fields: Optional[list] = None
+    inferred_task: Optional[str] = None
+    profile_timestamp: str
+
+
+@app.post("/api/datasets/profile")
+def profile_dataset(request: DatasetProfileRequest):
+    """Profile a dataset and return its characteristics"""
+    import uuid
+    
+    # Simulate dataset profiling based on source type
+    if request.source == "upload":
+        file_name = request.file_name or "uploaded_file"
+        file_type = request.file_type or "csv"
+        size_mb = request.file_size_mb or 1.0
+        name = file_name
+    elif request.source == "connection":
+        name = request.connection_config.get("source_name", "Connected Dataset") if request.connection_config else "Connected Dataset"
+        file_type = request.connection_config.get("type", "csv") if request.connection_config else "csv"
+        size_mb = request.connection_config.get("size_mb", 10.0) if request.connection_config else 10.0
+    else:
+        name = f"Dataset-{request.dataset_id[:8]}"
+        file_type = "csv"
+        size_mb = 10.0
+    
+    # Infer data type from file type
+    if file_type in ["csv", "parquet"]:
+        data_type = "tabular"
+    elif file_type == "json":
+        data_type = "tabular"  # Could be either
+    elif file_type == "image":
+        data_type = "image"
+    elif file_type == "text":
+        data_type = "text"
+    else:
+        data_type = "tabular"
+    
+    # Simulate profiling results
+    rows = int(size_mb * 1000) if size_mb > 0 else 10000
+    columns = random.randint(5, 50)
+    features = columns - 1  # Assume last column is label
+    
+    # Check for PII in column names (simple heuristic)
+    pii_keywords = ["email", "phone", "ssn", "social", "credit", "card", "password", "address", "dob", "birth"]
+    pii_fields = []
+    sample_columns = [f"col_{i}" for i in range(columns)]
+    for col in sample_columns:
+        for keyword in pii_keywords:
+            if keyword in col.lower():
+                pii_fields.append(col)
+                break
+    
+    pii_detected = len(pii_fields) > 0
+    
+    # Check for label column
+    label_present = True
+    label_type = "classification"
+    if data_type == "tabular":
+        # Check if likely regression
+        if "regression" in name.lower():
+            label_type = "regression"
+        elif "forecast" in name.lower() or "prediction" in name.lower():
+            label_type = "regression"
+    
+    # Class balance (if classification)
+    class_balance = None
+    if label_present and label_type == "classification":
+        class_balance = {
+            "class_0": int(rows * 0.6),
+            "class_1": int(rows * 0.4),
+        }
+    
+    # Missing values (random)
+    missing_values = int(rows * columns * random.uniform(0.01, 0.1))
+    missing_percentage = (missing_values / (rows * columns)) * 100
+    
+    # Inferred task
+    inferred_task = "classification"
+    if label_type == "regression":
+        inferred_task = "regression"
+    elif data_type == "text":
+        inferred_task = "text_classification"
+    elif data_type == "image":
+        inferred_task = "image_classification"
+    elif data_type == "time-series":
+        inferred_task = "forecasting"
+    
+    dataset_id = str(uuid.uuid4())
+    
+    return {
+        "dataset": {
+            "id": dataset_id,
+            "name": name,
+            "source": request.source,
+            "type": data_type,
+            "size_mb": size_mb,
+            "rows": rows,
+            "columns": columns,
+            "features": features,
+            "label_type": label_type,
+            "label_present": label_present,
+            "missing_values": missing_values,
+            "missing_percentage": round(missing_percentage, 2),
+            "class_balance": class_balance,
+            "pii_detected": pii_detected,
+            "pii_fields": pii_fields,
+            "inferred_task": inferred_task,
+            "profile_timestamp": datetime.utcnow().isoformat(),
+        }
+    }
+
+
+@app.post("/api/datasets/validate")
+def validate_dataset(request: dict):
+    """Validate dataset against constraints"""
+    dataset = request.get("dataset", {})
+    constraints = request.get("constraints", {})
+    
+    violations = []
+    suggestions = []
+    
+    # Check size vs budget
+    size_mb = dataset.get("size_mb", 0)
+    max_cost = constraints.get("max_cost_usd", 10)
+    
+    if size_mb > 100 and max_cost < 5:
+        violations.append({
+            "constraint": "dataset_size",
+            "message": f"Large dataset ({size_mb}MB) may exceed budget constraints",
+            "severity": "hard"
+        })
+        suggestions.append({
+            "reason": "Consider sampling the dataset or increasing budget",
+            "suggested_action": "sample_data",
+            "priority": 1
+        })
+    
+    # Check for missing label
+    if not dataset.get("label_present", True):
+        violations.append({
+            "constraint": "label_present",
+            "message": "No label column detected - supervised learning not possible",
+            "severity": "hard"
+        })
+        suggestions.append({
+            "reason": "Add a label column or use unsupervised learning",
+            "suggested_action": "add_label",
+            "priority": 1
+        })
+    
+    # Check PII for regulated compliance
+    pii_detected = dataset.get("pii_detected", False)
+    compliance = constraints.get("compliance_level", "standard")
+    
+    if pii_detected and compliance in ["regulated", "highly_regulated"]:
+        violations.append({
+            "constraint": "pii_detected",
+            "message": "PII detected in dataset - not compliant with regulated requirements",
+            "severity": "hard"
+        })
+        suggestions.append({
+            "reason": "Anonymize or remove PII fields before training",
+            "suggested_action": "remove_pii",
+            "priority": 1
+        })
+    
+    # Check missing values
+    missing_pct = dataset.get("missing_percentage", 0)
+    if missing_pct > 20:
+        violations.append({
+            "constraint": "missing_values",
+            "message": f"High missing value rate ({missing_pct}%)",
+            "severity": "soft"
+        })
+        suggestions.append({
+            "reason": "Consider imputation or removing rows with missing values",
+            "suggested_action": "impute",
+            "priority": 2
+        })
+    
+    is_valid = len([v for v in violations if v["severity"] == "hard"]) == 0
+    
+    return {
+        "is_valid": is_valid,
+        "violations": violations,
+        "suggestions": suggestions,
+    }
+
+
+@app.get("/api/datasets")
+def list_datasets():
+    """List all datasets"""
+    # In real implementation, this would query the database
+    return {"datasets": []}
+
+
+@app.get("/api/datasets/{dataset_id}")
+def get_dataset(dataset_id: str):
+    """Get dataset by ID"""
+    return {
+        "dataset": {
+            "id": dataset_id,
+            "name": f"Dataset-{dataset_id[:8]}",
+            "type": "tabular",
+            "size_mb": 10.0,
+            "profile_timestamp": datetime.utcnow().isoformat(),
+        }
+    }
+
+
+# ============================================
+# TRAINING EXECUTION ENDPOINTS
+# ============================================
+
+class TrainingRequest(BaseModel):
+    pipeline_id: str
+    dataset_id: str
+    constraints: Constraints
+    estimated_cost: float
+    estimated_carbon: float
+    estimated_time_seconds: int
+
+
+class TrainingStatus(BaseModel):
+    run_id: str
+    pipeline_id: str
+    status: str
+    progress: float
+    current_step: Optional[str] = None
+    cost_spent: float
+    carbon_used: float
+    elapsed_time_seconds: int
+    estimated_total_time_seconds: Optional[int] = None
+    metrics: Optional[dict] = None
+    constraint_violations: Optional[list] = None
+    artifacts: Optional[dict] = None
+
+
+training_runs: dict = {}
+
+
+@app.post("/api/training/start")
+def start_training(request: TrainingRequest):
+    """Start a training run"""
+    import uuid
+    
+    run_id = str(uuid.uuid4())[:12]
+    
+    training_runs[run_id] = {
+        "run_id": run_id,
+        "pipeline_id": request.pipeline_id,
+        "dataset_id": request.dataset_id,
+        "status": "running",
+        "progress": 0.0,
+        "current_step": "initializing",
+        "cost_spent": 0.0,
+        "carbon_used": 0.0,
+        "elapsed_time_seconds": 0,
+        "estimated_total_time_seconds": request.estimated_time_seconds,
+        "constraints": request.constraints.model_dump(),
+        "estimated_cost": request.estimated_cost,
+        "estimated_carbon": request.estimated_carbon,
+    }
+    
+    return {
+        "run_id": run_id,
+        "status": "started",
+        "message": "Training started successfully"
+    }
+
+
+@app.get("/api/training/{run_id}")
+def get_training_status(run_id: str):
+    """Get training run status"""
+    if run_id not in training_runs:
+        raise HTTPException(status_code=404, detail="Training run not found")
+    
+    run = training_runs[run_id]
+    
+    # Simulate progress
+    if run["status"] == "running":
+        run["progress"] = min(run["progress"] + random.uniform(0.05, 0.15), 1.0)
+        run["elapsed_time_seconds"] += int(random.uniform(5, 15))
+        
+        progress_factor = run["progress"]
+        run["cost_spent"] = run["estimated_cost"] * progress_factor
+        run["carbon_used"] = run["estimated_carbon"] * progress_factor
+        
+        # Update current step
+        if run["progress"] < 0.3:
+            run["current_step"] = "preprocessing"
+        elif run["progress"] < 0.6:
+            run["current_step"] = "training"
+        elif run["progress"] < 0.9:
+            run["current_step"] = "evaluating"
+        else:
+            run["current_step"] = "finalizing"
+        
+        # Check constraint violations
+        violations = []
+        if run["cost_spent"] > run["constraints"]["max_cost_usd"]:
+            violations.append({
+                "constraint": "max_cost_usd",
+                "message": f"Cost ${run['cost_spent']:.2f} exceeded limit ${run['constraints']['max_cost_usd']}",
+                "value": run["cost_spent"],
+                "limit": run["constraints"]["max_cost_usd"]
+            })
+        
+        if run["carbon_used"] > run["constraints"]["max_carbon_kg"]:
+            violations.append({
+                "constraint": "max_carbon_kg",
+                "message": f"Carbon {run['carbon_used']:.4f}kg exceeded limit {run['constraints']['max_carbon_kg']}kg",
+                "value": run["carbon_used"],
+                "limit": run["constraints"]["max_carbon_kg"]
+            })
+        
+        run["constraint_violations"] = violations
+        
+        # Complete if 100% or violated
+        if run["progress"] >= 1.0:
+            run["status"] = "completed"
+            run["progress"] = 1.0
+            run["metrics"] = {
+                "accuracy": random.uniform(0.75, 0.95),
+                "f1": random.uniform(0.70, 0.92),
+                "precision": random.uniform(0.72, 0.94),
+                "recall": random.uniform(0.70, 0.93),
+            }
+            run["artifacts"] = {
+                "model": f"/models/{run_id}/model.pt",
+                "pipeline": f"/pipelines/{run_id}/pipeline.json",
+                "config": f"/config/{run_id}/config.yaml",
+            }
+        elif len(violations) > 0:
+            run["status"] = "cancelled"
+            run["artifacts"] = None
+    
+    return {"run": run}
+
+
+@app.post("/api/training/{run_id}/stop")
+def stop_training(run_id: str):
+    """Stop a training run"""
+    if run_id not in training_runs:
+        raise HTTPException(status_code=404, detail="Training run not found")
+    
+    training_runs[run_id]["status"] = "cancelled"
+    
+    return {
+        "status": "stopped",
+        "message": "Training run stopped successfully"
     }
 
 

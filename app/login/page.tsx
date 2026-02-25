@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   
-  const { login } = useAuth()
+  const { login, loginWithGoogle, loginWithGithub } = useAuth()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -179,6 +179,7 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
+                onClick={loginWithGoogle}
                 className="h-12 rounded-xl border border-neutral-700 bg-neutral-900 text-white hover:bg-neutral-800 transition-all flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -191,6 +192,7 @@ export default function LoginPage() {
               </button>
               <button
                 type="button"
+                onClick={loginWithGithub}
                 className="h-12 rounded-xl border border-neutral-700 bg-neutral-900 text-white hover:bg-neutral-800 transition-all flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
