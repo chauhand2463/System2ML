@@ -1,10 +1,6 @@
 # System2ML - AI-Driven ML Pipeline Design System
 
 <p align="center">
-  <img src="public/icon.svg" alt="System2ML Logo" width="120" />
-</p>
-
-<p align="center">
   <a href="https://github.com/your-org/system2ml">
     <img src="https://img.shields.io/badge/version-0.2.0-blue.svg" alt="Version" />
   </a>
@@ -495,5 +491,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  Built with ❤️ by the System2ML Team
+  Built with ❤️ by Dhairy Chauhan
 </p>
