@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://system2ml-api.onrender.com';
 
 export const API_ENDPOINTS = {
   DESIGN_REQUEST: `${API_BASE}/api/design/request`,

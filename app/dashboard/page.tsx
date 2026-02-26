@@ -3,11 +3,11 @@ import { TrendingUp, AlertCircle, Zap, CheckCircle2, Activity, ArrowUpRight, Pla
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://system2ml-api.onrender.com'
 
 async function getData() {
   // Return mock data if no API configured
-  if (!API_BASE || API_BASE === '') {
+  if (!API_BASE || API_BASE === '' || !API_BASE.startsWith('http')) {
     return {
       pipelines: [],
       runs: [],
