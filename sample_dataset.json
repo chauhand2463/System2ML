@@ -1,0 +1,40 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "employee_data.csv",
+  "source": "upload",
+  "type": "tabular",
+  "size_mb": 0.5,
+  "rows": 15,
+  "columns": 9,
+  "features": 8,
+  "label_type": "classification",
+  "label_present": true,
+  "missing_values": 0,
+  "missing_percentage": 0,
+  "class_balance": {
+    "Engineering": 5,
+    "Marketing": 4,
+    "Sales": 3,
+    "HR": 3
+  },
+  "pii_detected": true,
+  "pii_fields": ["email"],
+  "inferred_task": "classification",
+  "profile_timestamp": "2026-02-26T12:00:00Z",
+  "columns": [
+    {"name": "id", "type": "integer", "nullable": false},
+    {"name": "name", "type": "string", "nullable": false},
+    {"name": "age", "type": "integer", "nullable": false, "min": 26, "max": 45},
+    {"name": "email", "type": "string", "nullable": false, "pii": true},
+    {"name": "salary", "type": "integer", "nullable": false, "min": 55000, "max": 95000},
+    {"name": "department", "type": "categorical", "nullable": false, "categories": ["Engineering", "Marketing", "Sales", "HR"]},
+    {"name": "joined_date", "type": "date", "nullable": false},
+    {"name": "performance_score", "type": "float", "nullable": false, "min": 3.7, "max": 4.8},
+    {"name": "is_active", "type": "boolean", "nullable": false}
+  ],
+  "statistics": {
+    "mean_age": 34.1,
+    "mean_salary": 74533.33,
+    "mean_performance": 4.27
+  }
+}

@@ -373,28 +373,28 @@ export default function NewDatasetPage() {
                         <HardDrive className="w-4 h-4" />
                         <span className="text-sm">Size</span>
                       </div>
-                      <p className="text-xl font-bold text-white">{profileResult.size_mb.toFixed(1)} MB</p>
+                      <p className="text-xl font-bold text-white">{profileResult?.sizeMb?.toFixed(1) || '0'} MB</p>
                     </div>
                     <div className="p-4 rounded-xl bg-neutral-800/50">
                       <div className="flex items-center gap-2 text-neutral-400 mb-1">
                         <BarChart3 className="w-4 h-4" />
                         <span className="text-sm">Rows</span>
                       </div>
-                      <p className="text-xl font-bold text-white">{profileResult.rows?.toLocaleString()}</p>
+                      <p className="text-xl font-bold text-white">{profileResult?.rows?.toLocaleString() || '0'}</p>
                     </div>
                     <div className="p-4 rounded-xl bg-neutral-800/50">
                       <div className="flex items-center gap-2 text-neutral-400 mb-1">
                         <Tag className="w-4 h-4" />
                         <span className="text-sm">Features</span>
                       </div>
-                      <p className="text-xl font-bold text-white">{profileResult.features}</p>
+                      <p className="text-xl font-bold text-white">{profileResult?.features || '0'}</p>
                     </div>
                     <div className="p-4 rounded-xl bg-neutral-800/50">
                       <div className="flex items-center gap-2 text-neutral-400 mb-1">
                         <Clock className="w-4 h-4" />
                         <span className="text-sm">Missing</span>
                       </div>
-                      <p className="text-xl font-bold text-white">{profileResult.missing_percentage.toFixed(1)}%</p>
+                      <p className="text-xl font-bold text-white">{profileResult?.missingValues?.toFixed(1) || '0'}%</p>
                     </div>
                   </div>
 
@@ -403,21 +403,21 @@ export default function NewDatasetPage() {
                     <div>
                       <Label className="text-neutral-400">Data Type</Label>
                       <Badge className="mt-1 bg-brand-500/20 text-brand-400">
-                        {profileResult.type}
+                        {profileResult?.type || 'unknown'}
                       </Badge>
                     </div>
                     <div>
                       <Label className="text-neutral-400">Inferred Task</Label>
                       <Badge className="mt-1 bg-purple-500/20 text-purple-400">
-                        {profileResult.inferred_task}
+                        {profileResult?.inferredTask || 'unknown'}
                       </Badge>
                     </div>
                     <div>
                       <Label className="text-neutral-400">Label Present</Label>
                       <div className="mt-1">
-                        {profileResult.label_present ? (
+                        {profileResult?.labelPresent ? (
                           <Badge className="bg-emerald-500/20 text-emerald-400">
-                            Yes - {profileResult.label_type}
+                            Yes - {profileResult?.labelType}
                           </Badge>
                         ) : (
                           <Badge className="bg-red-500/20 text-red-400">No</Badge>
@@ -427,7 +427,7 @@ export default function NewDatasetPage() {
                     <div>
                       <Label className="text-neutral-400">PII Detected</Label>
                       <div className="mt-1">
-                        {profileResult.pii_detected ? (
+                        {profileResult?.piiDetected ? (
                           <Badge className="bg-red-500/20 text-red-400">
                             <Shield className="w-3 h-3 mr-1" />
                             Yes
@@ -440,14 +440,14 @@ export default function NewDatasetPage() {
                   </div>
 
                   {/* PII Fields */}
-                  {profileResult.pii_detected && profileResult.pii_fields && (
+                  {profileResult?.piiDetected && profileResult?.piiFields && (
                     <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
                       <div className="flex items-center gap-2 text-red-400 mb-2">
                         <Shield className="w-4 h-4" />
                         <span className="font-medium">PII Fields Detected</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {profileResult.pii_fields.map((field, i) => (
+                        {profileResult.piiFields.map((field: string, i: number) => (
                           <Badge key={i} variant="outline" className="border-red-500/30 text-red-300">
                             {field}
                           </Badge>
@@ -457,19 +457,19 @@ export default function NewDatasetPage() {
                   )}
 
                   {/* Class Balance */}
-                  {profileResult.class_balance && (
+                  {profileResult?.classBalance && (
                     <div>
                       <Label className="text-neutral-400">Class Balance</Label>
                       <div className="mt-2 space-y-2">
-                        {Object.entries(profileResult.class_balance).map(([cls, count]) => (
+                        {Object.entries(profileResult.classBalance).map(([cls, count]) => (
                           <div key={cls} className="flex items-center gap-2">
                             <span className="text-sm text-neutral-300 w-20">{cls}</span>
                             <Progress 
-                              value={(count / (profileResult.rows || 1)) * 100} 
+                              value={(Number(count) / (profileResult?.rows || 1)) * 100} 
                               className="flex-1 h-2"
                             />
                             <span className="text-sm text-neutral-400 w-16 text-right">
-                              {((count / (profileResult.rows || 1)) * 100).toFixed(1)}%
+                              {((Number(count) / (profileResult?.rows || 1)) * 100).toFixed(1)}%
                             </span>
                           </div>
                         ))}

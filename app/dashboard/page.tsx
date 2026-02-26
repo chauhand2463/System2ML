@@ -3,23 +3,34 @@ import { TrendingUp, AlertCircle, Zap, CheckCircle2, Activity, ArrowUpRight, Pla
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
 async function getData() {
+  // Return mock data if no API configured
+  if (!API_BASE || API_BASE === '') {
+    return {
+      pipelines: [],
+      runs: [],
+      activities: [],
+      metrics: { total_pipelines: 0, active_pipelines: 0, total_runs: 0, completed_runs: 0, avg_accuracy: 0, avg_cost: 0, avg_carbon: 0 },
+      failures: [],
+    }
+  }
+
   try {
     const [pipelinesRes, runsRes, activitiesRes, metricsRes, failuresRes] = await Promise.all([
-      fetch(`${API_BASE}/api/pipelines`, { cache: 'no-store', next: { revalidate: 0 } }),
-      fetch(`${API_BASE}/api/runs`, { cache: 'no-store', next: { revalidate: 0 } }),
-      fetch(`${API_BASE}/api/activities`, { cache: 'no-store', next: { revalidate: 0 } }),
-      fetch(`${API_BASE}/api/metrics`, { cache: 'no-store', next: { revalidate: 0 } }),
-      fetch(`${API_BASE}/api/failures`, { cache: 'no-store', next: { revalidate: 0 } }),
+      fetch(`${API_BASE}/api/pipelines`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
+      fetch(`${API_BASE}/api/runs`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
+      fetch(`${API_BASE}/api/activities`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
+      fetch(`${API_BASE}/api/metrics`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
+      fetch(`${API_BASE}/api/failures`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
     ])
     
-    const pipelines = await pipelinesRes.json()
-    const runs = await runsRes.json()
-    const activities = await activitiesRes.json()
-    const metrics = await metricsRes.json()
-    const failures = await failuresRes.json()
+    const pipelines = pipelinesRes?.ok ? await pipelinesRes.json() : { pipelines: [] }
+    const runs = runsRes?.ok ? await runsRes.json() : { runs: [] }
+    const activities = activitiesRes?.ok ? await activitiesRes.json() : { activities: [] }
+    const metrics = metricsRes?.ok ? await metricsRes.json() : { total_pipelines: 0, active_pipelines: 0, total_runs: 0, completed_runs: 0, avg_accuracy: 0, avg_cost: 0, avg_carbon: 0 }
+    const failures = failuresRes?.ok ? await failuresRes.json() : { failures: [] }
     
     return {
       pipelines: pipelines.pipelines || [],
@@ -34,7 +45,7 @@ async function getData() {
       pipelines: [],
       runs: [],
       activities: [],
-      metrics: {},
+      metrics: { total_pipelines: 0, active_pipelines: 0, total_runs: 0, completed_runs: 0, avg_accuracy: 0, avg_cost: 0, avg_carbon: 0 },
       failures: [],
     }
   }
@@ -97,6 +108,21 @@ export default async function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="p-8 min-h-screen">
+        {/* API Not Configured Banner */}
+        {(!API_BASE || API_BASE === '') && (
+          <div className="mb-6 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-400" />
+              <div>
+                <p className="text-yellow-400 font-medium">Backend API Not Connected</p>
+                <p className="text-yellow-400/70 text-sm">
+                  Set NEXT_PUBLIC_API_URL environment variable to connect to your backend.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
