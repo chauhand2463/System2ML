@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Trash2, Plus, Save, RotateCcw, Check, X, ChevronDown, Settings, Zap, Database, Cpu, HardDrive, Activity, BarChart3, Globe, FileText, Image, Layers, Workflow, ArrowRight } from 'lucide-react'
+import { Trash2, Plus, Save, RotateCcw, Check, X, Settings, Zap, Database, Cpu, HardDrive, Activity, Layers, Workflow, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type NodeType = 
@@ -265,18 +265,29 @@ const POSITIONS: Record<NodeType, { x: number; y: number }> = {
 }
 
 export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave }: PipelineDesignerProps) {
-  const [nodes, setNodes] = useState<PipelineNode[]>(initialNodes)
-  const [edges, setEdges] = useState<PipelineEdge[]>(initialEdges)
+  const [nodes, setNodes] = useState<PipelineNode[]>([])
+  const [edges, setEdges] = useState<PipelineEdge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [showAddMenu, setShowAddMenu] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    setNodes(initialNodes)
+    setEdges(initialEdges)
+  }, [initialNodes, initialEdges])
+
+  const generateId = useCallback(() => {
+    return `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  }, [])
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId)
   const editingNode = nodes.find(n => n.id === editingNodeId)
 
   const addNode = useCallback((type: NodeType) => {
     const template = NODE_TEMPLATES[type]
-    const id = `node-${Date.now()}`
+    const id = generateId()
     const existingCount = nodes.filter(n => n.type === type).length
     
     const newNode: PipelineNode = {
@@ -447,7 +458,24 @@ export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave 
                   const source = nodes.find(n => n.id === edge.source)
                   const target = nodes.find(n => n.id === edge.target)
                   if (!source || !target) return null
-                  return (
+  if (!mounted) {
+    return (
+      <div className="flex h-full gap-6">
+        <div className="flex-1 rounded-2xl border border-neutral-800 bg-neutral-900/50 backdrop-blur-xl p-4 overflow-hidden">
+          <div className="flex items-center justify-center h-full">
+            <div className="text-neutral-500">Loading pipeline designer...</div>
+          </div>
+        </div>
+        <div className="w-96 rounded-2xl border border-neutral-800 bg-neutral-900/50 backdrop-blur-xl p-6">
+          <div className="flex items-center justify-center h-full">
+            <div className="text-neutral-500">Properties</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
                     <path key={edge.id} d={`M ${source.position.x + 100} ${source.position.y + 40} C ${source.position.x + 150} ${source.position.y + 40}, ${target.position.x - 50} ${target.position.y + 40}, ${target.position.x} ${target.position.y + 40}`} stroke="#6b8ef4" strokeWidth="2" fill="none" className="opacity-50" />
                   )
                 })}

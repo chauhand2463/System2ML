@@ -2,11 +2,13 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 interface User {
-  id: string
+  id: number
   name: string
   email: string
-  avatar: string
+  avatar: string | null
   provider?: string
 }
 
@@ -14,6 +16,7 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<boolean>
+  register: (name: string, email: string, password: string) => Promise<boolean>
   loginWithGoogle: () => void
   loginWithGithub: () => void
   logout: () => void
@@ -27,34 +30,110 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem('system2ml_user')
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored))
-      } catch {
+    const token = localStorage.getItem('system2ml_token')
+    if (token) {
+      fetchCurrentUser(token)
+    } else {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const fetchCurrentUser = async (token: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (res.ok) {
+        const userData = await res.json()
+        setUser(userData)
+      } else {
+        localStorage.removeItem('system2ml_token')
         localStorage.removeItem('system2ml_user')
       }
+    } catch (error) {
+      console.warn('Backend not available, using cached session')
+      const cachedUser = localStorage.getItem('system2ml_user')
+      if (cachedUser) {
+        try {
+          setUser(JSON.parse(cachedUser))
+        } catch {
+          localStorage.removeItem('system2ml_user')
+        }
+      }
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
-  }, [])
+  }
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true)
     
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    if (email && password.length >= 4) {
-      const user: User = {
-        id: '1',
-        name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
-        email,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-        provider: 'email',
+    try {
+      console.log('Attempting login to:', `${API_URL}/api/auth/login`)
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setUser(data.user)
+        localStorage.setItem('system2ml_token', data.token)
+        localStorage.setItem('system2ml_user', JSON.stringify(data.user))
+        setIsLoading(false)
+        return true
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Login failed')
       }
-      setUser(user)
-      localStorage.setItem('system2ml_user', JSON.stringify(user))
-      setIsLoading(false)
-      return true
+    } catch (error: any) {
+      console.error('Login error:', error)
+      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        alert('Cannot connect to backend server!\n\nPlease start the backend in Terminal 2:\nuvicorn ui.api:app --host 0.0.0.0 --port 8000')
+      } else {
+        alert(error.message || 'Login failed')
+      }
+    }
+    
+    setIsLoading(false)
+    return false
+  }
+
+  const register = async (name: string, email: string, password: string): Promise<boolean> => {
+    setIsLoading(true)
+    
+    try {
+      const res = await fetch(`${API_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, email, password }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setUser(data.user)
+        localStorage.setItem('system2ml_token', data.token)
+        localStorage.setItem('system2ml_user', JSON.stringify(data.user))
+        setIsLoading(false)
+        return true
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Registration failed')
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error)
+      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+        alert('Cannot connect to backend server!\n\nPlease start the backend in Terminal 2:\nuvicorn ui.api:app --host 0.0.0.0 --port 8000')
+      } else {
+        alert(error.message || 'Registration failed')
+      }
     }
     
     setIsLoading(false)
@@ -77,14 +156,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = authUrl
   }
 
-  const logout = () => {
+  const logout = async () => {
+    const token = localStorage.getItem('system2ml_token')
+    if (token) {
+      try {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+      } catch (error) {
+        console.error('Logout error:', error)
+      }
+    }
     setUser(null)
+    localStorage.removeItem('system2ml_token')
     localStorage.removeItem('system2ml_user')
-    document.cookie = 'system2ml_user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, loginWithGoogle, loginWithGithub, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, loginWithGoogle, loginWithGithub, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   )

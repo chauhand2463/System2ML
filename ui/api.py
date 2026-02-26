@@ -2,17 +2,19 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Literal
+from typing import Optional, Literal, List, Dict, Any
+from fastapi.responses import JSONResponse
 import uuid
 from datetime import datetime
 import random
 import json
 
 from agent.planner import DesignAgent, ConstraintSpec
-from ui.database import PipelineStore, DesignStore, RunStore, ActivityStore, FailureStore
+from ui.database import PipelineStore, DesignStore, RunStore, ActivityStore, FailureStore, UserStore, SessionStore, generate_token
+from lib.state_machine import LifecycleState, ProjectState, ProjectStore, ValidationError, ConstraintViolation, PAGE_TO_STATE
 
 app = FastAPI(title="System2ML API", version="0.2.0")
 
@@ -23,6 +25,530 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+
+class AuthResponse(BaseModel):
+    user: dict
+    token: str
+
+
+@app.post("/api/auth/register", response_model=AuthResponse)
+def register(request: RegisterRequest):
+    if not request.email or not request.password or not request.name:
+        raise HTTPException(status_code=400, detail="All fields are required")
+    
+    if len(request.password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    
+    user = UserStore.create(request.email, request.password, request.name)
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    
+    token = SessionStore.create(user['id'], generate_token())
+    
+    return AuthResponse(user=user, token=token)
+
+
+# ===== LIFECYCLE STATE MACHINE API =====
+
+@app.get("/api/lifecycle/state/{project_id}")
+def get_lifecycle_state(project_id: str):
+    project = ProjectStore.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "current_state": project.current_state.value if project.current_state else None,
+        "allowed_next_states": [s.value for s in project.get_allowed_next_states()],
+        "is_blocked": project.is_blocked(),
+        "blocking_errors": [{"code": e.code, "message": e.message, "action": e.action} for e in project.get_blocking_errors()],
+        "validation_errors": [{"code": e.code, "message": e.message, "action": e.action} for e in project.validation_errors],
+        "constraints": project.constraints,
+        "profile_info": project.profile_info,
+        "dataset_info": project.dataset_info,
+        "created_at": project.created_at,
+        "updated_at": project.updated_at,
+    }
+
+
+@app.post("/api/lifecycle/transition/{project_id}")
+def transition_state(project_id: str, target_state: str, metadata: Optional[Dict[str, Any]] = None):
+    project = ProjectStore.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    try:
+        target = LifecycleState(target_state)
+        project.transition_to(target, metadata or {})
+        return {"success": True, "current_state": project.current_state.value}
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid target state: {target_state}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/lifecycle/validate/{project_id}")
+def validate_state_access(project_id: str, requested_page: str):
+    project = ProjectStore.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    required_state = PAGE_TO_STATE.get(requested_page)
+    if not required_state:
+        return {"allowed": True, "reason": "Page has no state requirement"}
+    
+    can_access = project.can_transition_to(required_state) or project.current_state == required_state
+    
+    return {
+        "allowed": can_access,
+        "required_state": required_state.value,
+        "current_state": project.current_state.value if project.current_state else None,
+        "allowed_states": [s.value for s in project.get_allowed_next_states()],
+        "is_blocked": project.is_blocked(),
+        "blocking_errors": [{"code": e.code, "message": e.message, "action": e.action} for e in project.get_blocking_errors()],
+    }
+
+
+@app.post("/api/projects")
+def create_project(name: str):
+    project = ProjectStore.create(name)
+    return {"project_id": project.id, "name": project.name, "current_state": project.current_state.value}
+
+
+@app.get("/api/projects")
+def list_projects():
+    projects = ProjectStore.get_all()
+    return [
+        {"project_id": p.id, "name": p.name, "current_state": p.current_state.value if p.current_state else None}
+        for p in projects
+    ]
+
+
+@app.get("/api/projects/{project_id}")
+def get_project(project_id: str):
+    project = ProjectStore.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "current_state": project.current_state.value if project.current_state else None,
+        "constraints": project.constraints,
+        "profile_info": project.profile_info,
+        "candidates": project.candidates,
+        "selected_pipeline": project.selected_pipeline,
+        "training_plan": project.training_plan,
+        "training_result": project.training_result,
+    }
+
+
+# ===== DATASET VALIDATION GATE =====
+
+class DatasetProfileRequest(BaseModel):
+    project_id: Optional[str] = None
+    source: str = "upload"
+    file_name: Optional[str] = "dataset"
+    file_type: Optional[str] = "csv"
+    file_size_mb: float = 1.0
+    dataset_type: str = "tabular"
+    rows: int = 1000
+    columns: int = 10
+    has_labels: bool = True
+    pii_detected: bool = False
+    connection_config: Optional[Dict[str, Any]] = None
+    dataset_id: Optional[str] = None
+
+
+class DatasetValidationRequest(BaseModel):
+    project_id: Optional[str] = None
+    compliance_level: Literal["low", "regulated", "high"] = "low"
+
+
+@app.post("/api/datasets/profile")
+def profile_dataset(request: DatasetProfileRequest):
+    project_id = request.project_id
+    
+    # Create project if not exists
+    project = None
+    if project_id:
+        project = ProjectStore.get(project_id)
+    
+    if not project:
+        project = ProjectStore.create(f"Project-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}")
+        project_id = project.id
+    
+    # Map frontend format to profile data
+    profile_data = {
+        "name": request.file_name or request.dataset_id or "dataset",
+        "source": request.source or "upload",
+        "type": request.dataset_type or "tabular",
+        "rows": request.rows or 1000,
+        "columns": request.columns or 10,
+        "has_labels": True if request.has_labels is None else request.has_labels,
+        "pii_detected": request.pii_detected or False,
+        "file_size_mb": request.file_size_mb or 0.0,
+    }
+    
+    project.profile_info = profile_data
+    project.dataset_info = profile_data
+    
+    try:
+        project.transition_to(LifecycleState.DATASET_PROFILED, profile_data)
+    except:
+        pass  # If already transitioned
+    
+    return {
+        "status": "success",
+        "profile": profile_data,
+        "dataset": profile_data,
+        "current_state": project.current_state.value if project.current_state else None,
+        "project_id": project.id,
+    }
+
+
+@app.post("/api/datasets/validate")
+def validate_dataset(request: DatasetValidationRequest):
+    project_id = request.project_id
+    
+    # Get or create project
+    project = None
+    if project_id:
+        project = ProjectStore.get(project_id)
+    
+    if not project:
+        project = ProjectStore.create(f"Project-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}")
+        project_id = project.id
+    
+    # Create default profile if none exists
+    if not project.profile_info:
+        project.profile_info = {
+            "name": "dataset",
+            "source": "upload",
+            "type": "tabular",
+            "rows": 1000,
+            "columns": 10,
+            "has_labels": True,
+            "pii_detected": False,
+            "file_size_mb": 10.0,
+        }
+        project.dataset_info = project.profile_info
+    
+    if project.current_state != LifecycleState.DATASET_PROFILED:
+        try:
+            project.transition_to(LifecycleState.DATASET_PROFILED, project.profile_info)
+        except:
+            pass  # Transition might fail if already in valid state
+    
+    errors = []
+    
+    profile = project.profile_info or {}
+    
+    if not profile.get("has_labels", True):
+        errors.append(ValidationError(
+            code="BLOCK_NO_LABELS",
+            message="Dataset has no labels for supervised learning",
+            action="add_label_column"
+        ))
+    
+    if profile.get("pii_detected", False) and request.compliance_level == "low":
+        errors.append(ValidationError(
+            code="BLOCK_PII_DETECTED",
+            message="PII detected but compliance level is not regulated",
+            action="anonymize_or_upgrade_compliance"
+        ))
+    
+    if profile.get("file_size_mb", 0) > 1000:
+        errors.append(ValidationError(
+            code="BLOCK_DATASET_TOO_LARGE",
+            message="Dataset exceeds 1GB limit",
+            action="sample_or_compress"
+        ))
+    
+    project.validation_errors = errors
+    
+    if errors:
+        try:
+            project.transition_to(LifecycleState.TRAINING_BLOCKED, {"errors": [{"code": e.code, "message": e.message, "action": e.action} for e in errors]})
+        except:
+            pass
+        return {
+            "status": "blocked",
+            "errors": [{"code": e.code, "message": e.message, "action": e.action} for e in errors],
+            "current_state": project.current_state.value if project.current_state else None,
+        }
+    
+    try:
+        project.transition_to(LifecycleState.DATASET_VALIDATED, {"errors": []})
+    except:
+        pass
+    
+    return {
+        "status": "valid",
+        "errors": [],
+        "current_state": project.current_state.value if project.current_state else None,
+    }
+
+
+# ===== TRAINING PLANNING GATE =====
+
+class TrainingPlanRequest(BaseModel):
+    project_id: str
+    pipeline_id: Optional[str] = None
+    model_type: str = "random_forest"
+    dataset_rows: int = 10000
+    estimated_epochs: int = 100
+
+
+@app.post("/api/training/plan")
+def plan_training(request: TrainingPlanRequest):
+    project = ProjectStore.get(request.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.current_state not in [LifecycleState.EXECUTION_APPROVED, LifecycleState.CANDIDATES_GENERATED]:
+        raise HTTPException(status_code=400, detail="Pipeline must be approved before planning training")
+    
+    constraints = project.constraints
+    max_cost = constraints.get("max_cost_usd", 100)
+    max_carbon = constraints.get("max_carbon_kg", 10)
+    max_latency = constraints.get("max_latency_ms", 60000)
+    
+    estimated_cost = (request.dataset_rows / 10000) * 0.05 * (request.estimated_epochs / 100)
+    estimated_carbon = estimated_cost * 0.5
+    estimated_time_ms = (request.dataset_rows / 1000) * 1000 * (request.estimated_epochs / 100)
+    peak_memory_mb = (request.dataset_rows / 10000) * 512
+    
+    violations = []
+    
+    if estimated_cost > max_cost:
+        violations.append(ConstraintViolation(
+            metric="cost",
+            estimated=estimated_cost,
+            limit=max_cost,
+            suggestion="sample_data or switch_model_family"
+        ))
+    
+    if estimated_carbon > max_carbon:
+        violations.append(ConstraintViolation(
+            metric="carbon",
+            estimated=estimated_carbon,
+            limit=max_carbon,
+            suggestion="reduce_epochs or use_smaller_model"
+        ))
+    
+    if estimated_time_ms > max_latency:
+        violations.append(ConstraintViolation(
+            metric="latency",
+            estimated=estimated_time_ms,
+            limit=max_latency,
+            suggestion="reduce_dataset_size or optimize_model"
+        ))
+    
+    training_plan = {
+        "estimated_cost_usd": round(estimated_cost, 2),
+        "estimated_carbon_kg": round(estimated_carbon, 2),
+        "estimated_time_ms": int(estimated_time_ms),
+        "peak_memory_mb": int(peak_memory_mb),
+        "model_type": request.model_type,
+        "dataset_rows": request.dataset_rows,
+        "violations": [
+            {"metric": v.metric, "estimated": v.estimated, "limit": v.limit, "suggestion": v.suggestion}
+            for v in violations
+        ],
+    }
+    
+    project.training_plan = training_plan
+    
+    if violations:
+        project.transition_to(LifecycleState.TRAINING_BLOCKED, {"violations": violations, "plan": training_plan})
+        return {
+            "status": "blocked",
+            "violations": [{"metric": v.metric, "estimated": v.estimated, "limit": v.limit, "suggestion": v.suggestion} for v in violations],
+            "plan": training_plan,
+            "current_state": project.current_state.value,
+        }
+    
+    return {
+        "status": "approved",
+        "plan": training_plan,
+        "current_state": project.current_state.value,
+    }
+
+
+# ===== LIVE TRAINING WITH KILL-SWITCH =====
+
+class TrainingStartRequest(BaseModel):
+    project_id: str
+    pipeline_id: str
+
+
+@app.post("/api/training/start")
+def start_training(request: TrainingStartRequest):
+    project = ProjectStore.get(request.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.current_state != LifecycleState.EXECUTION_APPROVED:
+        raise HTTPException(status_code=400, detail="Training must be planned and approved before starting")
+    
+    training_config = {
+        "pipeline_id": request.pipeline_id,
+        "started_at": datetime.utcnow().isoformat(),
+        "status": "running",
+        "cost_used": 0.0,
+        "carbon_used": 0.0,
+    }
+    
+    project.transition_to(LifecycleState.TRAINING_RUNNING, training_config)
+    
+    return {
+        "status": "started",
+        "training_id": str(uuid.uuid4())[:8],
+        "current_state": project.current_state.value,
+    }
+
+
+@app.get("/api/training/status/{project_id}")
+def get_training_status(project_id: str):
+    project = ProjectStore.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.current_state != LifecycleState.TRAINING_RUNNING:
+        return {
+            "status": project.current_state.value if project.current_state else "not_running",
+            "training_result": project.training_result,
+        }
+    
+    constraints = project.constraints
+    max_cost = constraints.get("max_cost_usd", 100)
+    max_carbon = constraints.get("max_carbon_kg", 10)
+    
+    running_plan = project.training_plan
+    cost_used = running_plan.get("estimated_cost_usd", 0) * random.uniform(0.3, 0.7)
+    carbon_used = running_plan.get("estimated_carbon_kg", 0) * random.uniform(0.3, 0.7)
+    
+    kill_reason = None
+    if cost_used > max_cost:
+        kill_reason = "COST_LIMIT_EXCEEDED"
+    elif carbon_used > max_carbon:
+        kill_reason = "CARBON_LIMIT_EXCEEDED"
+    
+    if kill_reason:
+        project.transition_to(LifecycleState.TRAINING_KILLED, {
+            "reason": kill_reason,
+            "cost_used": cost_used,
+            "carbon_used": carbon_used,
+        })
+        return {
+            "status": "killed",
+            "reason": kill_reason,
+            "cost_used": round(cost_used, 2),
+            "carbon_used": round(carbon_used, 2),
+            "current_state": project.current_state.value,
+        }
+    
+    return {
+        "status": "running",
+        "progress": random.randint(30, 70),
+        "cost_used": round(cost_used, 2),
+        "carbon_used": round(carbon_used, 2),
+        "current_state": project.current_state.value,
+    }
+
+
+@app.post("/api/training/stop/{project_id}")
+def stop_training(project_id: str):
+    project = ProjectStore.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.current_state != LifecycleState.TRAINING_RUNNING:
+        raise HTTPException(status_code=400, detail="No training running to stop")
+    
+    project.transition_to(LifecycleState.TRAINING_KILLED, {"reason": "USER_REQUESTED"})
+    
+    return {
+        "status": "stopped",
+        "current_state": project.current_state.value,
+    }
+
+
+@app.post("/api/training/complete/{project_id}")
+def complete_training(project_id: str, metrics: Optional[Dict[str, Any]] = None):
+    project = ProjectStore.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if project.current_state != LifecycleState.TRAINING_RUNNING:
+        raise HTTPException(status_code=400, detail="No training running to complete")
+    
+    result = {
+        "status": "completed",
+        "completed_at": datetime.utcnow().isoformat(),
+        "metrics": metrics or {},
+        "cost_total": project.training_plan.get("estimated_cost_usd", 0),
+        "carbon_total": project.training_plan.get("estimated_carbon_kg", 0),
+    }
+    
+    project.transition_to(LifecycleState.TRAINING_COMPLETED, result)
+    
+    return {
+        "status": "completed",
+        "result": result,
+        "current_state": project.current_state.value,
+    }
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+def login(request: LoginRequest):
+    if not request.email or not request.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    
+    user = UserStore.verify_login(request.email, request.password)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    token = SessionStore.create(user['id'], generate_token())
+    
+    return AuthResponse(user=user, token=token)
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+        SessionStore.delete(token)
+    return {"message": "Logged out successfully"}
+
+
+@app.get("/api/auth/me")
+def get_current_user(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = authorization[7:]
+    user = SessionStore.get_user_by_token(token)
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+    return user
 
 
 class DataProfile(BaseModel):

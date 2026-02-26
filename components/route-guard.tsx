@@ -20,6 +20,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
+  const [isBackendDown, setIsBackendDown] = useState(false)
 
   useEffect(() => {
     const checkAuth = () => {
@@ -32,13 +33,24 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
         return
       }
 
-      const user = localStorage.getItem('system2ml_user')
-      if (!user) {
+      const token = localStorage.getItem('system2ml_token')
+      const userStr = localStorage.getItem('system2ml_user')
+      
+      if (!token || !userStr) {
         router.push('/login')
         return
       }
 
-      // Check design flow paths require dataset
+      try {
+        const user = JSON.parse(userStr)
+        setIsLoading(false)
+      } catch {
+        localStorage.removeItem('system2ml_token')
+        localStorage.removeItem('system2ml_user')
+        router.push('/login')
+        return
+      }
+
       const isDesignFlowPath = designFlowPaths.some(path => 
         pathname.startsWith(path)
       )
@@ -60,7 +72,13 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 border-3 border-brand-500/30 rounded-full" />
+            <div className="absolute top-0 left-0 w-12 h-12 border-3 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <p className="text-neutral-400 text-sm animate-pulse">Loading...</p>
+        </div>
       </div>
     )
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -18,21 +18,47 @@ import {
   LogOut,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   Play,
   Plus,
   Database,
+  FileSpreadsheet,
+  Lock,
+  Cpu,
+  Check,
+  X,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import { useWorkflow, LifecycleState } from '@/hooks/use-workflow'
+
+const WIZARD_STEPS = [
+  { id: 'DATASET_UPLOADED', label: 'Dataset', href: '/datasets/new', icon: Database },
+  { id: 'DATASET_PROFILED', label: 'Profile', href: '/datasets/profile', icon: FileSpreadsheet },
+  { id: 'DATASET_VALIDATED', label: 'Validate', href: '/datasets/validate', icon: Lock },
+  { id: 'CONSTRAINTS_VALIDATED', label: 'Constraints', href: '/design/constraints', icon: Zap },
+  { id: 'CANDIDATES_GENERATED', label: 'Results', href: '/design/results', icon: Lightbulb },
+  { id: 'EXECUTION_APPROVED', label: 'Confirm', href: '/train/confirm', icon: CheckCircle2 },
+  { id: 'TRAINING_RUNNING', label: 'Training', href: '/train/running', icon: Cpu },
+  { id: 'TRAINING_COMPLETED', label: 'Results', href: '/train/result', icon: Activity },
+]
 
 function SidebarComponent() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuth()
+  const { projectState, validatePageAccess } = useWorkflow()
+  const [wizardExpanded, setWizardExpanded] = useState(true)
+  const [currentStep, setCurrentStep] = useState(0)
+
+  useEffect(() => {
+    const step = WIZARD_STEPS.findIndex(s => s.id === projectState?.current_state)
+    if (step >= 0) {
+      setCurrentStep(step)
+    }
+  }, [projectState?.current_state])
 
   const mainMenu = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, color: 'text-blue-400' },
-    { label: 'New Dataset', href: '/datasets/new', icon: Plus, color: 'text-brand-400' },
-    { label: 'Design Wizard', href: '/design/input', icon: Lightbulb, color: 'text-yellow-400' },
     { label: 'Pipelines', href: '/pipelines', icon: Zap, color: 'text-brand-400' },
     { label: 'Runs', href: '/runs', icon: Activity, color: 'text-emerald-400' },
     { label: 'Failures', href: '/failures', icon: AlertCircle, color: 'text-red-400' },
@@ -50,6 +76,17 @@ function SidebarComponent() {
   const handleLogout = () => {
     logout()
     router.push('/login')
+  }
+
+  const getStepStatus = (index: number) => {
+    if (index < currentStep) return 'completed'
+    if (index === currentStep) return 'current'
+    if (projectState?.is_blocked) return 'blocked'
+    return 'pending'
+  }
+
+  const isStepAccessible = (index: number) => {
+    return index <= currentStep || (projectState?.is_blocked && index < currentStep)
   }
 
   return (
@@ -73,15 +110,102 @@ function SidebarComponent() {
         </Link>
       </div>
 
-      {/* Quick Action Button */}
-      <div className="relative px-4 py-4">
-        <Link
-          href="/datasets/new"
-          className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all duration-300 hover:scale-[1.02]"
+      {/* Design Wizard Section */}
+      <div className="relative px-3 py-3 border-b border-white/5">
+        <button
+          onClick={() => setWizardExpanded(!wizardExpanded)}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gradient-to-r from-brand-500/10 to-transparent border border-brand-500/20 hover:border-brand-500/40 transition-all"
         >
-          <Plus className="w-4 h-4" />
-          New Dataset
-        </Link>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-brand-400" />
+            </div>
+            <span className="text-sm font-semibold text-white">Design Wizard</span>
+          </div>
+          {wizardExpanded ? (
+            <ChevronDown className="w-4 h-4 text-brand-400" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-brand-400" />
+          )}
+        </button>
+
+        {wizardExpanded && (
+          <div className="mt-2 space-y-1 max-h-80 overflow-y-auto">
+            {WIZARD_STEPS.map((step, index) => {
+              const Icon = step.icon
+              const status = getStepStatus(index)
+              const accessible = isStepAccessible(index)
+              const isActive = pathname === step.href
+
+              return (
+                <Link
+                  key={step.id}
+                  href={accessible ? step.href : '#'}
+                  onClick={(e) => {
+                    if (!accessible) {
+                      e.preventDefault()
+                      alert(`Complete previous steps first! Current step: ${WIZARD_STEPS[currentStep].label}`)
+                    }
+                  }}
+                  className={cn(
+                    'group flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-300',
+                    isActive
+                      ? 'bg-brand-500/20 text-brand-400'
+                      : accessible
+                        ? status === 'completed'
+                          ? 'text-emerald-400/70 hover:text-emerald-400 hover:bg-emerald-500/10'
+                          : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                        : 'text-neutral-600 cursor-not-allowed'
+                  )}
+                >
+                  <div className={cn(
+                    "w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold",
+                    status === 'completed' && 'bg-emerald-500/20 text-emerald-400',
+                    status === 'current' && 'bg-brand-500/20 text-brand-400 animate-pulse',
+                    status === 'blocked' && 'bg-red-500/20 text-red-400',
+                    status === 'pending' && 'bg-neutral-800 text-neutral-500'
+                  )}>
+                    {status === 'completed' ? <Check className="w-3 h-3" /> : 
+                     status === 'blocked' ? <X className="w-3 h-3" /> :
+                     index + 1}
+                  </div>
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="flex-1 font-medium">{step.label}</span>
+                  {status === 'completed' && (
+                    <Check className="w-3 h-3 text-emerald-400" />
+                  )}
+                </Link>
+              )
+            })}
+            
+            {/* Progress Bar */}
+            <div className="mt-3 px-1">
+              <div className="flex justify-between text-[10px] text-neutral-500 mb-1">
+                <span>Progress</span>
+                <span>{Math.round((currentStep / (WIZARD_STEPS.length - 1)) * 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full transition-all duration-500"
+                  style={{ width: `${(currentStep / (WIZARD_STEPS.length - 1)) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Blocked Warning */}
+            {projectState?.is_blocked && (
+              <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                <div className="flex items-center gap-2 text-red-400 text-xs">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span className="font-medium">Workflow Blocked</span>
+                </div>
+                <p className="text-[10px] text-neutral-500 mt-1">
+                  {projectState.blocking_errors?.[0]?.message || 'Fix errors to continue'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Navigation */}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { DashboardLayout } from '@/components/layout/dashboard-layout'
+import { TerminalLayout } from '@/components/layout/terminal-layout'
 import { useDesign, PipelineCandidate } from '@/hooks/use-design'
 import { validateExecution } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

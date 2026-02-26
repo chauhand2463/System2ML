@@ -1,14 +1,30 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { use } from 'react'
+import { useState, useEffect, use } from 'react'
+import dynamic from 'next/dynamic'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { PipelineDesigner, PipelineNode, PipelineEdge } from '@/components/pipelines/pipeline-designer'
+import { PipelineNode, PipelineEdge } from '@/components/pipelines/pipeline-designer'
 import { fetchPipelineById, fetchPipelineRuns } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { ArrowLeft, Play, BookOpen, Loader2, Save } from 'lucide-react'
+
+const PipelineDesigner = dynamic(
+  () => import('@/components/pipelines/pipeline-designer').then(mod => ({ default: mod.PipelineDesigner })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full gap-6">
+        <div className="flex-1 rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4">
+          <div className="flex items-center justify-center h-full text-neutral-500">
+            Loading pipeline designer...
+          </div>
+        </div>
+      </div>
+    )
+  }
+)
 
 interface PipelinePageProps {
   params: Promise<{ id: string }>

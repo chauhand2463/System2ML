@@ -353,21 +353,14 @@ export default function TrainConfirmPage() {
               Back to Pipeline Selection
             </Button>
             <Button
-              onClick={handleStartTraining}
-              disabled={starting || !preTrainingCheck.allPass}
+              onClick={() => router.push('/training/plan')}
+              disabled={!preTrainingCheck.allPass}
               className="bg-gradient-to-r from-brand-500 to-brand-600"
             >
-              {starting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Starting...
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-2" />
-                  Start Training
-                </>
-              )}
+              <>
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Review Training Plan
+              </>
             </Button>
           </div>
         </div>

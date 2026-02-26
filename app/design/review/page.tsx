@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { DashboardLayout } from '@/components/layout/dashboard-layout'
+import { TerminalLayout } from '@/components/layout/terminal-layout'
 import { useDesign } from '@/hooks/use-design'
 import { generateCandidates, validateExecution, PipelineCandidate } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -91,32 +91,32 @@ export default function DesignReviewPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="p-8 min-h-screen">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Review & Validate</h1>
-            <p className="text-neutral-400">
-              Validate constraints and generate feasible pipeline candidates
-            </p>
-          </div>
+    <TerminalLayout>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-xl font-bold text-white">
+            <span className="text-cyan-400">$</span> ./design_review.sh --validate
+          </h1>
+          <p className="text-[#8b949e] text-sm mt-1 font-mono">
+            Validate constraints and generate pipeline candidates
+          </p>
+        </div>
 
-          {/* Dataset Summary */}
-          <Card className="bg-neutral-900/50 border-white/5 mb-6">
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 rounded-lg bg-brand-500/20">
-                    <Database className="w-5 h-5 text-brand-400" />
-                  </div>
-                  <div>
-                    <p className="text-white font-medium">{dataset.name}</p>
-                    <p className="text-neutral-400 text-sm">
-                      {dataset.type} • {dataset.inferredTask}
-                    </p>
-                  </div>
-                </div>
+        <div className="bg-[#0d1117] border border-[#30363d] rounded">
+          <div className="bg-[#161b22] px-4 py-2 border-b border-[#30363d]">
+            <span className="text-sm text-[#8b949e] font-mono">
+              <span className="text-cyan-400">$</span> active_dataset
+            </span>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-cyan-400">›</span>
+              <div>
+                <p className="text-white font-medium">{dataset.name}</p>
+                <p className="text-[#8b949e] text-sm">
+                  {dataset.type} • {dataset.inferredTask}
+                </p>
+              </div>
               </div>
             </CardContent>
           </Card>
@@ -291,6 +291,6 @@ export default function DesignReviewPage() {
           )}
         </div>
       </div>
-    </DashboardLayout>
+    </TerminalLayout>
   )
 }

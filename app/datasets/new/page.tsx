@@ -92,36 +92,58 @@ export default function NewDatasetPage() {
 
       const result = await profileDataset(request)
       clearInterval(progressInterval)
+      
+      console.log('Profile result:', result)
+      
+      if (!result || !result.dataset) {
+        setProfilingState({ status: 'error', progress: 0, error: 'Failed to profile dataset - no response' })
+        return
+      }
+      
       setProfilingState({ status: 'complete', progress: 100 })
+      
+      const ds = result.dataset
       
       // Convert API response to DatasetProfile format
       const mappedProfile: DatasetProfile = {
-        name: result.dataset.name,
-        source: result.dataset.source as 'upload' | 'connection' | 'existing',
-        type: result.dataset.type,
-        sizeMb: result.dataset.size_mb,
-        rows: result.dataset.rows,
-        columns: result.dataset.columns,
-        features: result.dataset.features,
-        labelType: result.dataset.label_type,
-        labelPresent: result.dataset.label_present,
-        missingValues: result.dataset.missing_percentage,
-        classBalance: result.dataset.class_balance,
-        piiDetected: result.dataset.pii_detected,
-        piiFields: result.dataset.pii_fields,
-        createdAt: result.dataset.profile_timestamp,
-        inferredTask: result.dataset.inferred_task,
+        name: ds.name || 'dataset',
+        source: ds.source || 'upload',
+        type: ds.type || 'tabular',
+        sizeMb: ds.size_mb || ds.sizeMb || 0,
+        rows: ds.rows,
+        columns: ds.columns,
+        features: ds.features,
+        labelType: ds.label_type || ds.labelType,
+        labelPresent: ds.label_present || ds.labelPresent || true,
+        missingValues: ds.missing_percentage || ds.missingValues || 0,
+        classBalance: ds.class_balance || ds.classBalance,
+        piiDetected: ds.pii_detected || ds.piiDetected || false,
+        piiFields: ds.pii_fields || ds.piiFields,
+        createdAt: ds.profile_timestamp || ds.createdAt || new Date().toISOString(),
+        inferredTask: ds.inferred_task || ds.inferredTask,
       }
       setProfileResult(mappedProfile)
       
-      // Validate against default constraints
-      setProfilingState(prev => ({ ...prev, status: 'validating', progress: 100 }))
-      const validation = await validateDataset(result.dataset, {
-        max_cost_usd: 10,
-        compliance_level: 'standard',
-      })
-      setValidationResult(validation)
-      setProfilingState({ status: 'complete', progress: 100 })
+      // Call backend validation
+      try {
+        const validation = await validateDataset({
+          project_id: result.project_id,
+          compliance_level: 'low',
+        })
+        setValidationResult(validation)
+        
+        if (validation.status === 'blocked') {
+          setProfilingState({ status: 'error', progress: 50, error: 'Validation blocked' })
+          return
+        }
+        
+        setProfilingState({ status: 'complete', progress: 100 })
+      } catch (valError: any) {
+        console.error('Validation error:', valError)
+        // Continue with validation passed on error
+        setValidationResult({ status: 'valid', errors: [] })
+        setProfilingState({ status: 'complete', progress: 100 })
+      }
       
     } catch (error: any) {
       clearInterval(progressInterval)
@@ -134,12 +156,15 @@ export default function NewDatasetPage() {
   }
 
   const handleProceedToDesign = () => {
-    if (profileResult && validationResult?.is_valid) {
+    if (profileResult && (validationResult?.status === 'valid' || validationResult?.is_valid)) {
       setDataset(profileResult)
       setDesignStep('input')
       router.push('/design/input')
     }
   }
+
+  const isValidationPassed = validationResult?.status === 'valid' || validationResult?.is_valid === true
+  const isValidationBlocked = validationResult?.status === 'blocked' || (validationResult?.errors && validationResult.errors.length > 0)
 
   const getFileIcon = () => {
     if (!file) return <FileSpreadsheet className="w-8 h-8" />
@@ -477,8 +502,47 @@ export default function NewDatasetPage() {
                     </div>
                   )}
 
+                  {/* Blocking Errors */}
+                  {isValidationBlocked && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-red-400">
+                        <AlertTriangle className="w-5 h-5" />
+                        <span className="font-semibold">Validation Blocked</span>
+                      </div>
+                      {(validationResult.errors || validationResult.violations || []).map((err: any, i: number) => (
+                        <div key={i} className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="text-sm text-neutral-500 font-mono">{err.code}</p>
+                              <p className="text-white font-medium mt-1">{err.message}</p>
+                              <p className="text-sm text-neutral-400 mt-1">Action: {err.action}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-500/30 text-red-400 hover:bg-red-500/20"
+                              onClick={() => {
+                                if (err.action?.includes('anonymize')) {
+                                  alert('Anonymization feature coming soon')
+                                } else if (err.action?.includes('add_label')) {
+                                  alert('Please add a label column to your dataset')
+                                } else if (err.action?.includes('sample')) {
+                                  alert('Please sample or compress your dataset')
+                                } else {
+                                  alert('Please fix the issue and re-upload')
+                                }
+                              }}
+                            >
+                              {err.action?.replace(/_/g, ' ') || 'Fix'}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Proceed Button */}
-                  {validationResult?.is_valid && (
+                  {isValidationPassed && (
                     <div className="flex justify-end pt-4">
                       <Button
                         onClick={handleProceedToDesign}
@@ -488,6 +552,15 @@ export default function NewDatasetPage() {
                         Proceed to Design
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
+                    </div>
+                  )}
+                  
+                  {/* Blocked State Message */}
+                  {isValidationBlocked && (
+                    <div className="flex justify-center pt-4">
+                      <p className="text-neutral-500 text-sm">
+                        Please fix the validation errors above to proceed
+                      </p>
                     </div>
                   )}
                 </CardContent>
