@@ -1,10 +1,6 @@
 # 🚀 System2ML - AI-Driven ML Pipeline Design System
 
 <p align="center">
-  <img src="public/icon.svg" alt="System2ML Logo" width="120" />
-</p>
-
-<p align="center">
   <a href="https://system2-ml.vercel.app/">
     <img src="https://img.shields.io/badge/Live-Demo-blueviolet.svg" alt="Live Demo" />
   </a>
