@@ -21,7 +21,7 @@
 ---
 
 <p align="center">
-  <b>Built with ❤️ by <a href="https://github.com/chauhand2463">Chandan Kumar</a></b>
+  <b>Built by <a href="https://github.com/chauhand2463">Dhairy Chauhan</a></b>
 </p>
 
 ---
@@ -294,7 +294,7 @@ MIT License - Copyright (c) 2026 **Chandan Kumar**
   <a href="https://github.com/chauhand2463">
     <img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub" />
   </a>
-  <a href="https://linkedin.com/in/chauhand2463">
+  <a href="https://linkedin.com/in/">
     <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn" />
   </a>
   <a href="https://twitter.com/chauhand2463">
