@@ -311,6 +311,6 @@ MIT License - Copyright (c) 2026 **Chandan Kumar**
 ---
 
 <p align="center">
-  <b>Built with ❤️ by <a href="https://github.com/chauhand2463">Chandan Kumar</a></b><br>
+  <b>Built with ❤️ by <a href="https://github.com/chauhand2463">Dhairy Chauhan</a></b><br>
   © 2026 System2ML - All rights reserved
 </p>
