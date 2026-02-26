@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Literal, List, Dict, Any
@@ -1000,86 +1000,180 @@ def profile_dataset(request: DatasetProfileRequest):
     """Profile a dataset and return its characteristics"""
     import uuid
     
-    # Simulate dataset profiling based on source type
-    if request.source == "upload":
-        file_name = request.file_name or "uploaded_file"
-        file_type = request.file_type or "csv"
-        size_mb = request.file_size_mb or 1.0
-        name = file_name
-    elif request.source == "connection":
-        name = request.connection_config.get("source_name", "Connected Dataset") if request.connection_config else "Connected Dataset"
-        file_type = request.connection_config.get("type", "csv") if request.connection_config else "csv"
-        size_mb = request.connection_config.get("size_mb", 10.0) if request.connection_config else 10.0
-    else:
-        name = f"Dataset-{request.dataset_id[:8]}"
-        file_type = "csv"
-        size_mb = 10.0
-    
-    # Infer data type from file type
-    if file_type in ["csv", "parquet"]:
-        data_type = "tabular"
-    elif file_type == "json":
-        data_type = "tabular"  # Could be either
-    elif file_type == "image":
-        data_type = "image"
-    elif file_type == "text":
-        data_type = "text"
-    else:
-        data_type = "tabular"
-    
-    # Simulate profiling results
-    rows = int(size_mb * 1000) if size_mb > 0 else 10000
-    columns = random.randint(5, 50)
-    features = columns - 1  # Assume last column is label
-    
-    # Check for PII in column names (simple heuristic)
-    pii_keywords = ["email", "phone", "ssn", "social", "credit", "card", "password", "address", "dob", "birth"]
-    pii_fields = []
-    sample_columns = [f"col_{i}" for i in range(columns)]
-    for col in sample_columns:
-        for keyword in pii_keywords:
-            if keyword in col.lower():
-                pii_fields.append(col)
-                break
-    
-    pii_detected = len(pii_fields) > 0
-    
-    # Check for label column
-    label_present = True
-    label_type = "classification"
-    if data_type == "tabular":
-        # Check if likely regression
-        if "regression" in name.lower():
-            label_type = "regression"
-        elif "forecast" in name.lower() or "prediction" in name.lower():
-            label_type = "regression"
-    
-    # Class balance (if classification)
-    class_balance = None
-    if label_present and label_type == "classification":
-        class_balance = {
-            "class_0": int(rows * 0.6),
-            "class_1": int(rows * 0.4),
-        }
-    
-    # Missing values (random)
-    missing_values = int(rows * columns * random.uniform(0.01, 0.1))
-    missing_percentage = (missing_values / (rows * columns)) * 100
-    
-    # Inferred task
-    inferred_task = "classification"
-    if label_type == "regression":
-        inferred_task = "regression"
-    elif data_type == "text":
-        inferred_task = "text_classification"
-    elif data_type == "image":
-        inferred_task = "image_classification"
-    elif data_type == "time-series":
-        inferred_task = "forecasting"
-    
+    errors = []
     dataset_id = str(uuid.uuid4())
     
+    # Default values for failed parsing
+    name = "unknown"
+    data_type = "unknown"
+    size_mb = 0.0
+    rows = 0
+    columns = 0
+    features = 0
+    label_present = False
+    label_column = None
+    label_type = None
+    inferred_task = "unknown"
+    missing_values = 0
+    missing_percentage = 0.0
+    pii_detected = False
+    pii_fields = []
+    class_balance = None
+    
+    try:
+        if request.source == "upload":
+            file_name = request.file_name or "uploaded_file"
+            file_type = request.file_type or "csv"
+            name = file_name
+            
+            # DO NOT trust frontend file_size_mb - compute from disk
+            size_mb = 0.0
+            
+            # Only parse if we have valid file info
+            if not file_name or file_name == "uploaded_file":
+                errors.append({"code": "NO_FILE_NAME", "message": "No file name provided"})
+            
+            # Try to actually parse the file if it's CSV
+            if file_type in ["csv"] and file_name and file_name != "uploaded_file":
+                try:
+                    import pandas as pd
+                    import os
+                    
+                    # Check if file exists in uploads folder
+                    upload_path = os.path.join("uploads", file_name)
+                    if os.path.exists(upload_path):
+                        # Compute file size from disk - THIS IS THE SOURCE OF TRUTH
+                        file_size_bytes = os.path.getsize(upload_path)
+                        size_mb = round(file_size_bytes / (1024 * 1024), 4)
+                        print(f"[PROFILE] File size from disk: {size_mb} MB for {file_name}")
+                        
+                        df = pd.read_csv(upload_path)
+                    else:
+                        # File not found - return error
+                        errors.append({"code": "FILE_NOT_FOUND", "message": f"File {file_name} not found in uploads. Please upload the file first."})
+                        raise Exception("File not found")
+                    
+                    # Real parsing results
+                    rows = len(df)
+                    columns = len(df.columns)
+                    features = columns - 1  # Assume last column is label
+                    
+                    if columns < 2:
+                        errors.append({"code": "INSUFFICIENT_COLUMNS", "message": f"Dataset has only {columns} column(s), need at least 2"})
+                        features = 0
+                    
+                    # Detect missing values
+                    missing_values = int(df.isnull().sum().sum())
+                    if rows > 0 and columns > 0:
+                        missing_percentage = round((missing_values / (rows * columns)) * 100, 2)
+                    
+                    # Infer data type
+                    data_type = "tabular"
+                    
+                    # Check for label column (last column or columns with "label", "target", "y")
+                    label_candidates = [col for col in df.columns if any(x in col.lower() for x in ['label', 'target', 'y', 'class', 'output', 'dependent'])]
+                    if label_candidates:
+                        label_column = label_candidates[0]
+                        label_present = True
+                        
+                        # Determine label type
+                        label_col = df[label_column]
+                        if pd.api.types.is_numeric_dtype(label_col):
+                            # Check if it's actually categorical (few unique values)
+                            unique_ratio = label_col.nunique() / max(rows, 1)
+                            if unique_ratio < 0.1:  # Less than 10% unique values = classification
+                                label_type = "classification"
+                                inferred_task = "classification"
+                                # Class balance
+                                class_balance = label_col.value_counts().to_dict()
+                            else:
+                                label_type = "regression"
+                                inferred_task = "regression"
+                        else:
+                            # Non-numeric = classification
+                            label_type = "classification"
+                            inferred_task = "classification"
+                            class_balance = label_col.value_counts().to_dict()
+                    else:
+                        # No label found - unsupervised
+                        label_present = False
+                        label_column = None
+                        inferred_task = "unsupervised"
+                    
+                    # Check for PII in column names
+                    pii_keywords = ["email", "phone", "ssn", "social", "credit", "card", "password", "address", "dob", "birth", "name", "first", "last"]
+                    for col in df.columns:
+                        if any(keyword in col.lower() for keyword in pii_keywords):
+                            pii_fields.append(col)
+                    pii_detected = len(pii_fields) > 0
+                    
+                except ImportError:
+                    errors.append({"code": "PANDAS_NOT_AVAILABLE", "message": "pandas not installed - cannot parse CSV"})
+                except Exception as parse_err:
+                    errors.append({"code": "FILE_PARSE_ERROR", "message": f"Failed to parse file: {str(parse_err)}"})
+            else:
+                # Non-CSV file type - can't parse
+                errors.append({"code": "UNSUPPORTED_FILE_TYPE", "message": f"File type {file_type} parsing not supported"})
+                
+        elif request.source == "connection":
+            name = request.connection_config.get("source_name", "Connected Dataset") if request.connection_config else "Connected Dataset"
+            file_type = request.connection_config.get("type", "csv") if request.connection_config else "csv"
+            size_mb = request.connection_config.get("size_mb", 10.0) if request.connection_config else 10.0
+            data_type = "tabular"
+            
+        else:
+            name = f"Dataset-{request.dataset_id[:8]}" if request.dataset_id else "Dataset"
+            file_type = "csv"
+            size_mb = 10.0
+            data_type = "tabular"
+        
+        # Infer data type from file type
+        if file_type in ["csv", "parquet", "json"]:
+            if data_type == "unknown":
+                data_type = "tabular"
+        elif file_type == "image":
+            data_type = "image"
+            inferred_task = "image_classification"
+        elif file_type == "text":
+            data_type = "text"
+            inferred_task = "text_classification"
+        
+    except Exception as e:
+        errors.append({"code": "PROFILING_ERROR", "message": str(e)})
+    
+    # Build response based on errors
+    if errors and features == 0 and rows == 0:
+        status = "failed"
+    elif errors:
+        status = "partial"
+    else:
+        status = "profiled"
+    
+    # If we have valid data, determine task
+    if features > 0 and inferred_task == "unknown":
+        inferred_task = "classification"  # Default
+    
     return {
+        "status": status,
+        "dataset_id": dataset_id,
+        "profile": {
+            "name": name,
+            "source": request.source,
+            "type": data_type,
+            "size_mb": size_mb,
+            "rows": rows,
+            "columns": columns,
+            "features": features,
+            "label_present": label_present,
+            "label_column": label_column,
+            "label_type": label_type,
+            "inferred_task": inferred_task,
+            "missing_values": missing_values,
+            "missing_percentage": missing_percentage,
+            "pii_detected": pii_detected,
+            "pii_fields": pii_fields,
+            "class_balance": class_balance,
+        },
         "dataset": {
             "id": dataset_id,
             "name": name,
@@ -1089,17 +1183,49 @@ def profile_dataset(request: DatasetProfileRequest):
             "rows": rows,
             "columns": columns,
             "features": features,
-            "label_type": label_type,
             "label_present": label_present,
+            "label_column": label_column,
+            "label_type": label_type,
             "missing_values": missing_values,
-            "missing_percentage": round(missing_percentage, 2),
-            "class_balance": class_balance,
+            "missing_percentage": missing_percentage,
             "pii_detected": pii_detected,
             "pii_fields": pii_fields,
             "inferred_task": inferred_task,
+            "class_balance": class_balance,
             "profile_timestamp": datetime.utcnow().isoformat(),
-        }
+        },
+        "errors": errors,
+        "current_state": "DATASET_PROFILED" if status == "profiled" else "DATASET_UPLOADED",
+        "project_id": dataset_id
     }
+
+
+# File upload endpoint
+@app.post("/api/datasets/upload")
+async def upload_dataset(file: UploadFile = File(...)):
+    """Upload a dataset file"""
+    import os
+    
+    uploads_dir = "uploads"
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    file_path = os.path.join(uploads_dir, file.filename)
+    
+    try:
+        contents = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        file_size_mb = len(contents) / (1024 * 1024)
+        
+        return {
+            "status": "success",
+            "file_name": file.filename,
+            "file_size_mb": round(file_size_mb, 2),
+            "file_path": file_path,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 
 @app.post("/api/datasets/validate")
@@ -1110,6 +1236,89 @@ def validate_dataset(request: dict):
     
     violations = []
     suggestions = []
+    errors = []
+    
+    # === CRITICAL VALIDATION CHECKS ===
+    
+    # Check file_size_mb > 0 - if 0, file wasn't persisted correctly
+    size_mb = dataset.get("size_mb", 0)
+    if size_mb <= 0:
+        errors.append({
+            "code": "FILE_NOT_PERSISTED",
+            "message": "Dataset file size is 0. Please re-upload the file."
+        })
+        suggestions.append({
+            "reason": "The file may not have been uploaded correctly. Please try uploading again.",
+            "suggested_action": "reupload",
+            "priority": 1
+        })
+    
+    # Check features == 0
+    features = dataset.get("features", 0)
+    if features == 0:
+        errors.append({
+            "code": "NO_FEATURES",
+            "message": "Dataset has 0 feature columns. Check header row or delimiter."
+        })
+        suggestions.append({
+            "reason": "Dataset has no feature columns. Please check your CSV file has a proper header row.",
+            "suggested_action": "reupload",
+            "priority": 1
+        })
+    
+    # Check columns < 2
+    columns = dataset.get("columns", 0)
+    if columns < 2:
+        errors.append({
+            "code": "INSUFFICIENT_COLUMNS",
+            "message": f"Dataset has only {columns} column(s), need at least 2."
+        })
+        suggestions.append({
+            "reason": "Need at least 2 columns (features + label).",
+            "suggested_action": "reupload",
+            "priority": 1
+        })
+    
+    # Check type == unknown
+    data_type = dataset.get("type", "unknown")
+    if data_type == "unknown":
+        errors.append({
+            "code": "UNKNOWN_DATA_TYPE",
+            "message": "Unable to determine data type."
+        })
+        suggestions.append({
+            "reason": "Data type is unknown. Upload a valid CSV, JSON, or other supported format.",
+            "suggested_action": "reupload",
+            "priority": 1
+        })
+    
+    # Check inferred_task == unknown
+    inferred_task = dataset.get("inferred_task", "unknown")
+    if inferred_task == "unknown":
+        errors.append({
+            "code": "TASK_UNKNOWN",
+            "message": "Unable to infer ML task. No valid label column found."
+        })
+        suggestions.append({
+            "reason": "Could not determine if this is classification or regression. Add a label column with numeric or categorical values.",
+            "suggested_action": "select_label",
+            "priority": 1
+        })
+    
+    # Check for missing label (for supervised learning)
+    label_present = dataset.get("label_present", False)
+    if inferred_task in ["classification", "regression"] and not label_present:
+        errors.append({
+            "code": "NO_LABEL",
+            "message": "No label column detected for supervised learning."
+        })
+        suggestions.append({
+            "reason": "Supervised learning requires a label column. Add a target/label column to your dataset.",
+            "suggested_action": "add_label",
+            "priority": 1
+        })
+    
+    # === EXISTING VALIDATION CHECKS ===
     
     # Check size vs budget
     size_mb = dataset.get("size_mb", 0)
@@ -1124,19 +1333,6 @@ def validate_dataset(request: dict):
         suggestions.append({
             "reason": "Consider sampling the dataset or increasing budget",
             "suggested_action": "sample_data",
-            "priority": 1
-        })
-    
-    # Check for missing label
-    if not dataset.get("label_present", True):
-        violations.append({
-            "constraint": "label_present",
-            "message": "No label column detected - supervised learning not possible",
-            "severity": "hard"
-        })
-        suggestions.append({
-            "reason": "Add a label column or use unsupervised learning",
-            "suggested_action": "add_label",
             "priority": 1
         })
     
@@ -1170,12 +1366,31 @@ def validate_dataset(request: dict):
             "priority": 2
         })
     
-    is_valid = len([v for v in violations if v["severity"] == "hard"]) == 0
+    # Determine status
+    has_blocking_errors = len(errors) > 0
+    has_hard_violations = len([v for v in violations if v.get("severity") == "hard"]) > 0
+    
+    if has_blocking_errors:
+        status = "blocked"
+    elif has_hard_violations:
+        status = "warning"
+    else:
+        status = "approved"
+    
+    # Build actions for UI
+    actions = []
+    if has_blocking_errors:
+        actions.append({"label": "Upload valid dataset", "action": "reupload"})
+        if "select_label" in [s.get("suggested_action") for s in suggestions]:
+            actions.append({"label": "Select label column", "action": "select_label"})
     
     return {
-        "is_valid": is_valid,
+        "status": status,
+        "errors": errors,
         "violations": violations,
         "suggestions": suggestions,
+        "actions": actions,
+        "is_valid": status == "approved",
     }
 
 

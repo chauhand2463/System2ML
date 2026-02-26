@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign, DatasetProfile } from '@/hooks/use-design'
-import { profileDataset, validateDataset, DatasetProfileRequest } from '@/lib/api'
+import { profileDataset, validateDataset, DatasetProfileRequest, uploadDataset } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -52,7 +52,7 @@ export default function NewDatasetPage() {
   }
 
   const handleProfiling = async () => {
-    setProfilingState({ status: 'profiling', progress: 0 })
+    setProfilingState({ status: 'profiling', progress: 10 })
     
     const progressInterval = setInterval(() => {
       setProfilingState(prev => ({
@@ -64,15 +64,21 @@ export default function NewDatasetPage() {
     try {
       let request: DatasetProfileRequest
       
-      if (source === 'upload') {
-        const fileSizeMb = file ? file.size / (1024 * 1024) : 1.0
-        const fileType = file?.name?.split('.').pop() as 'csv' | 'parquet' | 'json' | 'image' | 'text' | undefined
+      if (source === 'upload' && file) {
+        // Try to upload the file first
+        try {
+          await uploadDataset(file)
+        } catch (uploadErr) {
+          console.warn('Upload failed, continuing with metadata:', uploadErr)
+        }
         
+        const fileType = file.name.split('.').pop() as 'csv' | 'parquet' | 'json' | 'image' | 'text' | undefined
+        
+        // Don't send file_size_mb - backend computes it from disk
         request = {
           source: 'upload',
-          file_name: file?.name || 'uploaded_file',
+          file_name: file.name,
           file_type: fileType,
-          file_size_mb: Math.round(fileSizeMb * 100) / 100,
         }
       } else if (source === 'connection') {
         request = {
@@ -124,23 +130,24 @@ export default function NewDatasetPage() {
       }
       setProfileResult(mappedProfile)
       
-      // Call backend validation
+      // Call backend validation with dataset info
       try {
         const validation = await validateDataset({
-          project_id: result.project_id,
-          compliance_level: 'low',
+          dataset: ds,
+          constraints: {},
         })
         setValidationResult(validation)
         
-        if (validation.status === 'blocked') {
-          setProfilingState({ status: 'error', progress: 50, error: 'Validation blocked' })
+        // Check for validation errors - block if status is 'blocked' or invalid
+        if (validation.status === 'blocked' || validation.errors?.length > 0) {
+          const errorMsg = validation.errors?.map((e: any) => e.message).join('; ') || 'Validation blocked'
+          setProfilingState({ status: 'error', progress: 50, error: errorMsg })
           return
         }
         
         setProfilingState({ status: 'complete', progress: 100 })
       } catch (valError: any) {
         console.error('Validation error:', valError)
-        // Continue with validation passed on error
         setValidationResult({ status: 'valid', errors: [] })
         setProfilingState({ status: 'complete', progress: 100 })
       }
@@ -156,14 +163,37 @@ export default function NewDatasetPage() {
   }
 
   const handleProceedToDesign = () => {
-    if (profileResult && (validationResult?.status === 'valid' || validationResult?.is_valid)) {
+    // Additional validation checks before proceeding
+    if (!profileResult) return
+    
+    if (profileResult.features === 0) {
+      alert('Cannot proceed: Dataset has 0 feature columns. Please upload a valid dataset.')
+      return
+    }
+    
+    if (profileResult.inferredTask === 'unknown') {
+      alert('Cannot proceed: Unable to infer ML task. Please check your dataset has a valid label column.')
+      return
+    }
+    
+    if (profileResult.type === 'unknown') {
+      alert('Cannot proceed: Unknown data type. Please upload a valid CSV file.')
+      return
+    }
+    
+    if (validationResult?.status === 'blocked' || (validationResult?.errors && validationResult.errors.length > 0)) {
+      alert('Cannot proceed: Validation failed. Please fix the errors above.')
+      return
+    }
+    
+    if (profileResult && (validationResult?.status === 'valid' || validationResult?.is_valid || validationResult?.status === 'approved')) {
       setDataset(profileResult)
       setDesignStep('input')
       router.push('/design/input')
     }
   }
 
-  const isValidationPassed = validationResult?.status === 'valid' || validationResult?.is_valid === true
+  const isValidationPassed = validationResult?.status === 'valid' || validationResult?.is_valid === true || validationResult?.status === 'approved'
   const isValidationBlocked = validationResult?.status === 'blocked' || (validationResult?.errors && validationResult.errors.length > 0)
 
   const getFileIcon = () => {

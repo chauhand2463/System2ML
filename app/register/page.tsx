@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function RegisterPage() {
   const [name, setName] = useState('')
@@ -15,6 +16,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   
   const router = useRouter()
+  const { register } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,21 +41,14 @@ export default function RegisterPage() {
       return
     }
 
-    try {
-      const { useAuth } = await import('@/hooks/use-auth')
-      const { register } = useAuth()
-      const success = await register(name, email, password)
-      
-      if (success) {
-        router.push('/dashboard')
-      } else {
-        setError('Email already exists or registration failed')
-      }
-    } catch (err) {
-      setError('Connection error. Is the backend running?')
-    } finally {
-      setIsLoading(false)
+    const success = await register(name, email, password)
+    
+    if (success) {
+      router.push('/dashboard')
+    } else {
+      setError('Email already exists or registration failed')
     }
+    setIsLoading(false)
   }
 
   return (

@@ -1,0 +1,16 @@
+id,name,age,email, salary,department,joined_date,performance_score,is_active
+1,John Smith,32,john.smith@email.com,75000,Engineering,2022-01-15,4.5,true
+2,Sarah Johnson,28,sarah.j@email.com,65000,Marketing,2021-06-20,4.2,true
+3,Michael Brown,45,michael.b@email.com,95000,Sales,2019-03-10,4.8,true
+4,Emily Davis,31,emily.d@email.com,70000,Engineering,2020-11-05,3.9,true
+5,David Wilson,38,david.w@email.com,85000,HR,2018-08-22,4.1,true
+6,Jennifer Lee,26,jennifer.l@email.com,55000,Marketing,2023-02-14,4.0,true
+7,Robert Taylor,42,robert.t@email.com,90000,Sales,2017-05-30,4.6,true
+8,Lisa Anderson,29,lisa.a@email.com,62000,Engineering,2021-09-08,3.8,true
+9,James Martinez,35,james.m@email.com,78000,Marketing,2020-04-17,4.3,true
+10,Maria Garcia,33,maria.g@email.com,72000,HR,2019-12-01,4.4,true
+11,William Thompson,41,william.t@email.com,88000,Sales,2018-07-25,4.7,true
+12,Elizabeth White,27,elizabeth.w@email.com,58000,Engineering,2022-08-19,3.7,true
+13,Christopher Harris,36,chris.h@email.com,82000,Marketing,2019-01-12,4.2,true
+14,Amanda Clark,30,amanda.c@email.com,67000,HR,2021-03-28,4.1,true
+15,Daniel Lewis,34,daniel.l@email.com,79000,Engineering,2020-06-15,4.5,true

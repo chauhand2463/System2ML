@@ -409,7 +409,12 @@ export interface DatasetProfile {
 }
 
 export interface DatasetValidation {
+  status: 'approved' | 'blocked' | 'warning';
   is_valid: boolean;
+  errors: Array<{
+    code: string;
+    message: string;
+  }>;
   violations: Array<{
     constraint: string;
     message: string;
@@ -420,6 +425,36 @@ export interface DatasetValidation {
     suggested_action: string;
     priority: number;
   }>;
+  actions: Array<{
+    label: string;
+    action: string;
+  }>;
+}
+
+export async function uploadDataset(file: File): Promise<{
+  status: string;
+  file_name: string;
+  file_size_mb: number;
+  file_path: string;
+}> {
+  if (!isApiConfigured()) {
+    throw new Error('API not configured. Please set NEXT_PUBLIC_API_URL');
+  }
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const response = await fetch(`${API_BASE}/api/datasets/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Upload failed: ${response.status} - ${text}`);
+  }
+  
+  return response.json();
 }
 
 export async function profileDataset(request: DatasetProfileRequest): Promise<{ dataset: any }> {
@@ -459,6 +494,8 @@ export async function profileDataset(request: DatasetProfileRequest): Promise<{ 
 export async function validateDataset(params: {
   project_id?: string;
   compliance_level?: string;
+  dataset?: any;
+  constraints?: any;
 }): Promise<any> {
   if (!isApiConfigured()) {
     return { status: 'valid', errors: [] };
@@ -470,6 +507,8 @@ export async function validateDataset(params: {
       body: JSON.stringify({
         project_id: params.project_id || 'default',
         compliance_level: params.compliance_level || 'low',
+        dataset: params.dataset || {},
+        constraints: params.constraints || {},
       }),
     });
     const data = await response.json();

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { TerminalLayout } from '@/components/layout/terminal-layout'
+import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign } from '@/hooks/use-design'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -74,35 +74,30 @@ export default function DesignPreferencesPage() {
   }
 
   return (
-    <TerminalLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-white">
-            <span className="text-cyan-400">$</span> ./design_preferences.sh --configure
-          </h1>
-          <p className="text-[#8b949e] text-sm mt-1 font-mono">
-            Configure deployment and model preferences
-          </p>
-        </div>
+    <DashboardLayout>
+      <div className="p-8 min-h-screen">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2">Preferences</h1>
+            <p className="text-neutral-400">
+              Configure deployment and model preferences
+            </p>
+          </div>
 
-        <div className="bg-[#0d1117] border border-[#30363d] rounded">
-          <div className="bg-[#161b22] px-4 py-2 border-b border-[#30363d]">
-            <span className="text-sm text-[#8b949e] font-mono">
-              <span className="text-cyan-400">$</span> active_dataset
-            </span>
-          </div>
-          <div className="p-4">
-            <div className="flex items-center gap-3">
-              <span className="text-cyan-400">›</span>
-              <div>
-                <p className="text-white font-medium">{dataset.name}</p>
-                <p className="text-[#8b949e] text-sm">
-                  {dataset.rows?.toLocaleString()} rows × {dataset.features} features
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+          {/* Dataset Summary - Always Visible */}
+          <Card className="bg-neutral-900/50 border-white/5 mb-6">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 rounded-lg bg-brand-500/20">
+                    <Database className="w-5 h-5 text-brand-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{dataset.name}</p>
+                    <p className="text-neutral-400 text-sm">
+                      {dataset.rows?.toLocaleString()} rows × {dataset.features} features
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -287,6 +282,6 @@ export default function DesignPreferencesPage() {
           </div>
         </div>
       </div>
-    </TerminalLayout>
+    </DashboardLayout>
   )
 }
