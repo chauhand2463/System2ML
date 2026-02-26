@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: system2ml-backend
+    name: system2ml-api
     env: python
     region: oregon
     buildCommand: pip install -e ".[all]"
@@ -17,9 +17,9 @@ services:
     startCommand: npm run start -- -p $PORT
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://system2ml-backend.onrender.com
+        value: https://system2ml-api.onrender.com
       - key: NODE_VERSION
         value: "20"
     routes:
       - path: /api
-        service: system2ml-backend
+        service: system2ml-api
