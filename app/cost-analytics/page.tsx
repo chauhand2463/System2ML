@@ -3,43 +3,64 @@ import { CostAnalyticsChart, CarbonEmissionsChart, CostBreakdownPie } from '@/co
 import { DollarSign, Leaf, TrendingUp, AlertCircle, ArrowUpRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export default function CostAnalyticsPage() {
-  const totalCost = '$4,900'
-  const costTrend = '+8.2%'
-  const totalCarbon = '1,225 g'
-  const carbonTrend = '+12.5%'
-  const monthlyEstimate = '$19,600'
+export default async function CostAnalyticsPage() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://system2ml-api.onrender.com'
+
+  let metrics = {
+    total_weekly_cost: 0,
+    cost_trend: '0%',
+    avg_carbon: 0,
+    carbon_trend: '0%',
+    monthly_estimate: 0,
+    cost_history: [] as any[],
+    carbon_history: [] as any[]
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/metrics`, { cache: 'no-store' })
+    if (res.ok) {
+      metrics = await res.json()
+    }
+  } catch (e) {
+    console.error("Error fetching analytics metrics:", e)
+  }
+
+  const totalCost = `$${(metrics.total_weekly_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const costTrend = metrics.cost_trend || '0%'
+  const totalCarbon = `${(metrics.avg_carbon || 0).toFixed(3)} kg`
+  const carbonTrend = metrics.carbon_trend || '0%'
+  const monthlyEstimate = `$${(metrics.monthly_estimate || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
   const stats = [
-    { 
-      label: 'Total Weekly Cost', 
-      value: totalCost, 
+    {
+      label: 'Week-to-Date Cost',
+      value: totalCost,
       trend: costTrend,
-      icon: DollarSign, 
+      icon: DollarSign,
       color: 'from-brand-500 to-brand-600',
-      isPositive: false
+      isPositive: metrics.cost_trend?.startsWith('-')
     },
-    { 
-      label: 'Monthly Estimate', 
-      value: monthlyEstimate, 
+    {
+      label: 'Monthly Projection',
+      value: monthlyEstimate,
       trend: null,
-      icon: TrendingUp, 
+      icon: TrendingUp,
       color: 'from-amber-500 to-amber-600',
       isPositive: null
     },
-    { 
-      label: 'Weekly CO₂', 
-      value: totalCarbon, 
+    {
+      label: 'Avg CO₂ per Run',
+      value: totalCarbon,
       trend: carbonTrend,
-      icon: Leaf, 
+      icon: Leaf,
       color: 'from-emerald-500 to-emerald-600',
-      isPositive: false
+      isPositive: metrics.carbon_trend?.startsWith('-')
     },
-    { 
-      label: 'Cost Alerts', 
-      value: '3', 
+    {
+      label: 'Active Proposals',
+      value: '2',
       trend: null,
-      icon: AlertCircle, 
+      icon: AlertCircle,
       color: 'from-purple-500 to-purple-600',
       isPositive: null
     },
@@ -61,13 +82,13 @@ export default function CostAnalyticsPage() {
           {stats.map((stat, i) => {
             const Icon = stat.icon
             return (
-              <div 
+              <div
                 key={i}
                 className="relative group overflow-hidden rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6 hover:border-brand-500/30 transition-all duration-500 hover:scale-[1.02]"
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-brand-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                
+
                 <div className="relative">
                   <div className="flex items-center justify-between mb-4">
                     <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center shadow-lg`}>
@@ -92,7 +113,7 @@ export default function CostAnalyticsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
             <h2 className="text-lg font-bold text-white mb-6">Cost Over Time</h2>
-            <CostAnalyticsChart />
+            <CostAnalyticsChart data={metrics.cost_history} />
           </div>
           <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
             <h2 className="text-lg font-bold text-white mb-6">Cost Breakdown</h2>
@@ -102,7 +123,7 @@ export default function CostAnalyticsPage() {
 
         <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6 mb-8">
           <h2 className="text-lg font-bold text-white mb-6">Carbon Emissions</h2>
-          <CarbonEmissionsChart />
+          <CarbonEmissionsChart data={metrics.carbon_history} />
         </div>
 
         {/* Optimization Recommendations */}

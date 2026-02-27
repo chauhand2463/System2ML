@@ -26,11 +26,11 @@ VALID_TRANSITIONS = {
     LifecycleState.DATASET_VALIDATED: [LifecycleState.CONSTRAINTS_VALIDATED],
     LifecycleState.CONSTRAINTS_VALIDATED: [LifecycleState.FEASIBILITY_APPROVED, LifecycleState.DATASET_PROFILED],
     LifecycleState.FEASIBILITY_APPROVED: [LifecycleState.CANDIDATES_GENERATED],
-    LifecycleState.CANDIDATES_GENERATED: [LifecycleState.EXECUTION_APPROVED],
-    LifecycleState.EXECUTION_APPROVED: [LifecycleState.TRAINING_RUNNING],
+    LifecycleState.CANDIDATES_GENERATED: [LifecycleState.EXECUTION_APPROVED, LifecycleState.TRAINING_BLOCKED],
+    LifecycleState.EXECUTION_APPROVED: [LifecycleState.TRAINING_RUNNING, LifecycleState.TRAINING_BLOCKED],
     LifecycleState.TRAINING_RUNNING: [LifecycleState.TRAINING_COMPLETED, LifecycleState.TRAINING_KILLED],
     LifecycleState.TRAINING_COMPLETED: [],
-    LifecycleState.TRAINING_BLOCKED: [LifecycleState.DATASET_UPLOADED],
+    LifecycleState.TRAINING_BLOCKED: [LifecycleState.DATASET_UPLOADED, LifecycleState.EXECUTION_APPROVED],
     LifecycleState.TRAINING_KILLED: [LifecycleState.DATASET_UPLOADED],
 }
 
@@ -109,6 +109,9 @@ class ProjectState:
                 self.selected_pipeline = metadata
             elif target == LifecycleState.TRAINING_RUNNING:
                 self.training_plan = metadata
+            elif target == LifecycleState.TRAINING_BLOCKED:
+                self.training_plan = metadata.get("plan", {})
+                self.validation_errors = metadata.get("violations", [])
             elif target == LifecycleState.TRAINING_COMPLETED:
                 self.training_result = metadata
         return True

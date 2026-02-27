@@ -10,7 +10,7 @@ export type PipelineStatus = 'draft' | 'designed' | 'pending_training' | 'traini
 export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'quarantined'
 
 export interface DatasetProfile {
-   name: string
+  name: string
   source: 'upload' | 'connection' | 'existing'
   type: DataType
   sizeMb: number
@@ -134,6 +134,17 @@ export function DesignProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('system2ml_design_state')
       }
     }
+    
+    // Also check for dataset stored by quick upload
+    const datasetStored = localStorage.getItem('system2ml_dataset')
+    if (datasetStored) {
+      try {
+        const parsed = JSON.parse(datasetStored)
+        setState(prev => ({ ...prev, dataset: parsed }))
+      } catch {
+        localStorage.removeItem('system2ml_dataset')
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -197,7 +208,7 @@ export function DesignProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const canProceedToDesign = useCallback(() => {
-    return state.dataset !== null && !state.dataset.piiDetected
+    return state.dataset !== null
   }, [state.dataset])
 
   const canProceedToTraining = useCallback(() => {

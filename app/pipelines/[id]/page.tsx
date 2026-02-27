@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react'
 import dynamic from 'next/dynamic'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PipelineNode, PipelineEdge } from '@/components/pipelines/pipeline-designer'
-import { fetchPipelineById, fetchPipelineRuns } from '@/lib/api'
+import { fetchPipelineById, fetchPipelineRuns, executePipeline } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
@@ -12,7 +12,7 @@ import { ArrowLeft, Play, BookOpen, Loader2, Save } from 'lucide-react'
 
 const PipelineDesigner = dynamic(
   () => import('@/components/pipelines/pipeline-designer').then(mod => ({ default: mod.PipelineDesigner })),
-  { 
+  {
     ssr: false,
     loading: () => (
       <div className="flex h-full gap-6">
@@ -32,20 +32,21 @@ interface PipelinePageProps {
 
 export default function PipelineDetailPage({ params }: PipelinePageProps) {
   const { id } = use(params)
-  
+
   const [pipeline, setPipeline] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [nodes, setNodes] = useState<PipelineNode[]>([])
   const [edges, setEdges] = useState<PipelineEdge[]>([])
   const [latestRun, setLatestRun] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [deploying, setDeploying] = useState(false)
 
   useEffect(() => {
     async function loadData() {
       try {
         const data = await fetchPipelineById(id)
         setPipeline(data.pipeline)
-        
+
         if (data.pipeline?.designs?.length > 0) {
           const design = data.pipeline.designs[0]
           if (design.pipeline) {
@@ -53,7 +54,7 @@ export default function PipelineDetailPage({ params }: PipelinePageProps) {
             setEdges(design.pipeline.edges || [])
           }
         }
-        
+
         const runsData = await fetchPipelineRuns(id)
         setLatestRun(runsData[0])
       } catch (e) {
@@ -75,6 +76,28 @@ export default function PipelineDetailPage({ params }: PipelinePageProps) {
       await new Promise(resolve => setTimeout(resolve, 1000))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeploy = async () => {
+    setDeploying(true)
+    try {
+      const result = await executePipeline(id)
+      if (result.error) {
+        console.error('Deployment error:', result.error)
+        return
+      }
+
+      // Update pipeline status locally
+      setPipeline((prev: any) => ({ ...prev, status: 'active' }))
+
+      // Refresh runs
+      const runsData = await fetchPipelineRuns(id)
+      setLatestRun(runsData[0])
+    } catch (e) {
+      console.error('Error deploying pipeline:', e)
+    } finally {
+      setDeploying(false)
     }
   }
 
@@ -141,9 +164,17 @@ export default function PipelineDetailPage({ params }: PipelinePageProps) {
             </div>
             <div className="flex gap-3">
               {pipeline.status === 'designed' && (
-                <Button className="bg-brand-500 hover:bg-brand-600 text-white gap-2">
-                  <Play className="w-4 h-4" />
-                  Deploy
+                <Button
+                  onClick={handleDeploy}
+                  disabled={deploying}
+                  className="bg-brand-500 hover:bg-brand-600 text-white gap-2"
+                >
+                  {deploying ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                  {deploying ? 'Deploying...' : 'Deploy'}
                 </Button>
               )}
               <Button
@@ -184,7 +215,7 @@ export default function PipelineDetailPage({ params }: PipelinePageProps) {
 
         {/* Designer Canvas */}
         <div className="flex-1 min-h-0 pb-6">
-          <PipelineDesigner 
+          <PipelineDesigner
             initialNodes={nodes}
             initialEdges={edges}
             onSave={handleSavePipeline}

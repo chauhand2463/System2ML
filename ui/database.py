@@ -236,7 +236,7 @@ class RunStore:
         return run_id
     
     @staticmethod
-    def update_status(run_id: str, status: str, metrics: dict = None, error: str = None):
+    def update(run_id: str, status: str, metrics: dict = None, error: str = None):
         conn = get_db()
         c = conn.cursor()
         now = datetime.utcnow().isoformat()
@@ -251,16 +251,43 @@ class RunStore:
     def get_all():
         conn = get_db()
         c = conn.cursor()
-        c.execute('SELECT * FROM runs ORDER BY started_at DESC')
+        c.execute('''
+            SELECT r.*, p.name as pipeline_name 
+            FROM runs r 
+            JOIN pipelines p ON r.pipeline_id = p.id 
+            ORDER BY r.started_at DESC
+        ''')
         rows = c.fetchall()
         conn.close()
         return [dict(zip([col[0] for col in c.description], row)) for row in rows]
     
     @staticmethod
+    def get_by_id(run_id: str):
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''
+            SELECT r.*, p.name as pipeline_name 
+            FROM runs r 
+            JOIN pipelines p ON r.pipeline_id = p.id 
+            WHERE r.id = ?
+        ''', (run_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return dict(zip([col[0] for col in c.description], row))
+        return None
+    
+    @staticmethod
     def get_by_pipeline(pipeline_id: str):
         conn = get_db()
         c = conn.cursor()
-        c.execute('SELECT * FROM runs WHERE pipeline_id = ? ORDER BY started_at DESC', (pipeline_id,))
+        c.execute('''
+            SELECT r.*, p.name as pipeline_name 
+            FROM runs r 
+            JOIN pipelines p ON r.pipeline_id = p.id 
+            WHERE r.pipeline_id = ? 
+            ORDER BY r.started_at DESC
+        ''', (pipeline_id,))
         rows = c.fetchall()
         conn.close()
         return [dict(zip([col[0] for col in c.description], row)) for row in rows]

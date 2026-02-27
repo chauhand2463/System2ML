@@ -2,6 +2,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { TrendingUp, AlertCircle, Zap, CheckCircle2, Activity, ArrowUpRight, Play, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { QuickDatasetUpload } from '@/components/quick-upload'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://system2ml-api.onrender.com'
 
@@ -122,6 +123,9 @@ export default async function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* Quick Dataset Upload */}
+        <QuickDatasetUpload />
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

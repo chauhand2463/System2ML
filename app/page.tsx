@@ -2,21 +2,27 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { 
-  ArrowRight, 
-  Sparkles, 
-  Zap, 
-  Shield, 
-  BarChart3, 
-  GitBranch, 
-  Layers, 
+import {
+  ArrowRight,
+  Sparkles,
+  Zap,
+  Shield,
+  BarChart3,
+  GitBranch,
+  Layers,
   Cpu,
   Play,
   CheckCircle2,
   Menu,
   X,
   Star,
-  Quote
+  Quote,
+  Activity,
+  Globe,
+  Database,
+  Lock,
+  ChevronRight,
+  MonitorSmartphone
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -24,70 +30,52 @@ const features = [
   {
     icon: Sparkles,
     title: 'AI-Powered Design',
-    description: 'Let AI generate optimal ML pipelines based on your constraints',
-    color: 'from-violet-500 to-purple-600'
+    description: 'Autonomous agents generate state-of-the-art ML pipelines tailored to your unique constraints.',
+    color: 'from-brand-400 to-brand-600',
+    glow: 'shadow-brand-500/20'
   },
   {
     icon: Shield,
-    title: 'Constraint Validation',
-    description: 'Validate cost, carbon, latency, and compliance requirements',
-    color: 'from-emerald-500 to-teal-600'
+    title: 'Automated Governance',
+    description: 'Built-in compliance and guardrails ensure your models meet regulatory and ethical standards.',
+    color: 'from-violet-400 to-purple-600',
+    glow: 'shadow-violet-500/20'
   },
   {
     icon: BarChart3,
-    title: 'Real-time Monitoring',
-    description: 'Track pipeline performance, costs, and carbon emissions',
-    color: 'from-blue-500 to-cyan-600'
+    title: 'Advanced Observability',
+    description: 'Deep-dive analytics into cost, carbon, latency, and drift with predictive alerting.',
+    color: 'from-emerald-400 to-teal-600',
+    glow: 'shadow-emerald-500/20'
+  },
+  {
+    icon: Database,
+    title: 'Smart Data Profiling',
+    description: 'Instant insights into dataset topology, quality, and PII detection with automated fixes.',
+    color: 'from-blue-400 to-cyan-600',
+    glow: 'shadow-blue-500/20'
   },
   {
     icon: GitBranch,
-    title: 'Pipeline Governance',
-    description: 'Approval workflows and audit trails for all pipelines',
-    color: 'from-orange-500 to-red-600'
+    title: 'Multi-Cloud Deploy',
+    description: 'Zero-effort deployment to Edge, On-prem, or any cloud provider with optimized binaries.',
+    color: 'from-orange-400 to-red-600',
+    glow: 'shadow-orange-500/20'
   },
   {
-    icon: Layers,
-    title: 'Visual Pipeline Editor',
-    description: 'Drag-and-drop interface for building ML workflows',
-    color: 'from-pink-500 to-rose-600'
-  },
-  {
-    icon: Cpu,
-    title: 'Edge & Cloud Deploy',
-    description: 'Deploy to batch, real-time, or edge environments',
-    color: 'from-indigo-500 to-blue-600'
+    icon: Activity,
+    title: 'Feedback Loops',
+    description: 'Continuous learning pipelines that auto-retrain and optimize based on production performance.',
+    color: 'from-pink-400 to-rose-600',
+    glow: 'shadow-pink-500/20'
   }
 ]
 
 const stats = [
-  { value: '10x', label: 'Faster Development' },
-  { value: '60%', label: 'Cost Reduction' },
-  { value: '99.9%', label: 'Uptime SLA' },
-  { value: '50+', label: 'Pre-built Templates' }
-]
-
-const testimonials = [
-  {
-    name: 'Sarah Johnson',
-    role: 'ML Engineer at TechCorp',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-    content: 'System2ML reduced our pipeline design time by 80%. The AI constraint validation is incredibly smart.',
-    rating: 5
-  },
-  {
-    name: 'Michael Chen',
-    role: 'Data Science Lead at StartupX',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
-    content: 'Finally, a tool that understands both ML engineering and business constraints. Game changer!',
-    rating: 5
-  },
-  {
-    name: 'Emily Davis',
-    role: 'CTO at AI Innovations',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emily',
-    content: 'The governance features and audit trails give us the compliance we need. Highly recommended.',
-    rating: 5
-  }
+  { value: '450%', label: 'ROI Improvement' },
+  { value: '85ms', label: 'Inference Latency' },
+  { value: '0.02kg', label: 'Carbon footprint/run' },
+  { value: '24/7', label: 'Global Availability' }
 ]
 
 export default function LandingPage() {
@@ -98,295 +86,273 @@ export default function LandingPage() {
     setMounted(true)
   }, [])
 
+  if (!mounted) return <div className="min-h-screen bg-black" />;
+
   return (
-    <div className="min-h-screen bg-neutral-950 text-white overflow-x-hidden">
-      {/* Animated Background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-500/20 rounded-full blur-[128px] animate-pulse" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-violet-500/20 rounded-full blur-[128px] animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] md:w-[800px] md:h-[800px] bg-gradient-radial from-brand-500/10 to-transparent rounded-full" />
+    <div className="min-h-screen bg-[#030303] text-white selection:bg-brand-500/30">
+      {/* Cinematic Background Layer */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-brand-600/10 blur-[180px] animate-pulse-slow" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-violet-600/10 blur-[180px] animate-pulse-slow delay-2000" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-[0.03] mask-radial">
+          <div className="w-full h-full bg-[url('/extreme_hero_background_element_1772198551452.png')] bg-cover bg-center animate-spin-slow duration-[30s]" />
+        </div>
       </div>
 
       {/* Navigation */}
-      <nav className={`relative z-10 border-b border-white/10 backdrop-blur-xl transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 md:h-20">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/25">
-                <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-white" />
+      <nav className="fixed top-0 left-0 right-0 z-50 transition-all duration-500 border-b border-white/5 bg-black/20 backdrop-blur-2xl">
+        <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
+          <div className="flex items-center justify-between h-20">
+            <div className="flex items-center gap-4 group cursor-pointer">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-[0_0_25px_-5px_rgba(107,142,244,0.5)] group-hover:scale-110 transition-all duration-500">
+                <Sparkles className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg md:text-xl font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
-                System2ML
+              <span className="text-2xl font-black tracking-tighter bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
+                SYSTEM2ML
               </span>
             </div>
-            
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-neutral-400 hover:text-white transition-colors text-sm font-medium">Features</a>
-              <a href="#how-it-works" className="text-neutral-400 hover:text-white transition-colors text-sm font-medium">How it Works</a>
-              <a href="#testimonials" className="text-neutral-400 hover:text-white transition-colors text-sm font-medium">Testimonials</a>
+
+            <div className="hidden lg:flex items-center gap-10">
+              {['Features', 'Intelligence', 'Governance', 'Enterprise'].map((item) => (
+                <a key={item} href={`#${item.toLowerCase()}`} className="text-sm font-semibold text-neutral-400 hover:text-white transition-all duration-300 relative group">
+                  {item}
+                  <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-brand-500 transition-all duration-300 group-hover:w-full" />
+                </a>
+              ))}
             </div>
 
-            {/* Desktop Buttons */}
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden lg:flex items-center gap-4">
               <Link href="/login">
-                <Button variant="ghost" className="text-neutral-300 hover:text-white hover:bg-white/10">
-                  Sign In
-                </Button>
+                <Button variant="ghost" className="text-neutral-300 font-bold hover:bg-white/5">Sign In</Button>
               </Link>
               <Link href="/dashboard">
-                <Button className="bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white border-0 shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 transition-all duration-300">
-                  Get Started <ArrowRight className="w-4 h-4 ml-1" />
+                <Button className="btn-premium bg-gradient-to-r from-brand-500 to-brand-600 hover:shadow-brand-500/40">
+                  Launch Platform <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </Link>
             </div>
 
-            {/* Mobile Menu Button */}
-            <button 
-              className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <button className="lg:hidden p-2 text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              {mobileMenuOpen ? <X /> : <Menu />}
             </button>
           </div>
-
-          {/* Mobile Menu */}
-          {mobileMenuOpen && (
-            <div className="md:hidden py-4 border-t border-white/10">
-              <div className="flex flex-col gap-4">
-                <a href="#features" className="text-neutral-400 hover:text-white transition-colors py-2" onClick={() => setMobileMenuOpen(false)}>Features</a>
-                <a href="#how-it-works" className="text-neutral-400 hover:text-white transition-colors py-2" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
-                <a href="#testimonials" className="text-neutral-400 hover:text-white transition-colors py-2" onClick={() => setMobileMenuOpen(false)}>Testimonials</a>
-                <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
-                  <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="outline" className="w-full">Sign In</Button>
-                  </Link>
-                  <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
-                    <Button className="w-full bg-gradient-to-r from-brand-500 to-brand-600">Get Started</Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative z-10 pt-12 md:pt-20 pb-16 md:pb-32">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-4xl mx-auto">
-            <div className={`inline-flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-white/5 border border-white/10 mb-6 md:mb-8 transition-all duration-700 delay-100 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-              <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-              <span className="text-xs md:text-sm text-neutral-400">AI-Powered ML Pipeline Design</span>
+      {/* Hero: The Extreme Section */}
+      <main className="relative z-10">
+        <section className="min-h-screen flex flex-col items-center justify-center pt-32 pb-20 px-6">
+          <div className="text-center max-w-[1100px] mx-auto">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-md mb-10 animate-fade-in">
+              <span className="flex h-2 w-2 rounded-full bg-brand-500 animate-ping" />
+              <span className="text-xs font-bold tracking-[0.2em] text-neutral-400 uppercase">Next-Generation AI Orchestration</span>
             </div>
 
-            <h1 className={`text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold mb-4 md:mb-6 leading-tight transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-              Build ML Pipelines{' '}
-              <span className="bg-gradient-to-r from-brand-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
-                with AI
-              </span>
+            <h1 className="text-6xl md:text-8xl lg:text-[110px] font-black tracking-tight leading-[0.9] mb-8 animate-fade-in delay-200">
+              PIPELINES THAT <br />
+              <span className="text-gradient-brand">THINK AHEAD.</span>
             </h1>
 
-            <p className={`text-base md:text-xl text-neutral-400 mb-8 md:mb-10 max-w-2xl mx-auto leading-relaxed transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-              Design, validate, and deploy machine learning pipelines with intelligent 
-              constraint-aware AI. Optimize for cost, carbon, latency, and compliance.
+            <p className="text-lg md:text-2xl text-neutral-400 max-w-3xl mx-auto mb-14 leading-relaxed animate-fade-in delay-300">
+              System2ML is the premier autonomous design engine. We don't just build pipelines;
+              we evolve them based on your exact business constraints and real-world performance.
             </p>
 
-            <div className={`flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 transition-all duration-700 delay-400 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 animate-fade-in delay-400">
               <Link href="/dashboard">
-                <Button size="lg" className="w-full sm:w-auto h-12 md:h-14 px-6 md:px-8 text-sm md:text-base bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white border-0 shadow-xl shadow-brand-500/20 hover:shadow-brand-500/40 transition-all duration-300 hover:scale-105">
-                  <Play className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                  Start Building Free
+                <Button size="xl" className="h-16 px-10 rounded-2xl bg-white text-black font-black text-lg hover:bg-neutral-200 shadow-[0_0_40px_-10px_white] hover:scale-105 transition-all duration-500">
+                  Get Started for Free
                 </Button>
               </Link>
               <Link href="/design-agent">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto h-12 md:h-14 px-6 md:px-8 text-sm md:text-base border-white/20 text-white hover:bg-white/10 hover:border-white/30 transition-all duration-300">
-                  <Zap className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                  Try AI Designer
+                <Button size="xl" variant="outline" className="h-16 px-10 rounded-2xl border-white/20 hover:bg-white/5 font-bold text-lg backdrop-blur-xl">
+                  Explore AI Designer
                 </Button>
               </Link>
             </div>
 
-            {/* Stats */}
-            <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 mt-12 md:mt-20 transition-all duration-700 delay-500 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-12 mt-32 animate-fade-in delay-500 max-w-5xl mx-auto w-full">
               {stats.map((stat, i) => (
-                <div key={i} className="text-center">
-                  <div className="text-2xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent mb-1 md:mb-2">
-                    {stat.value}
-                  </div>
-                  <div className="text-neutral-500 text-xs md:text-sm">{stat.label}</div>
+                <div key={i} className="group cursor-default">
+                  <div className="text-4xl md:text-6xl font-black text-white mb-2 group-hover:text-brand-400 transition-colors duration-500">{stat.value}</div>
+                  <div className="text-xs md:text-sm font-bold tracking-widest text-neutral-500 uppercase">{stat.label}</div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Features Section */}
-      <section id="features" className="relative z-10 py-16 md:py-24 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 md:mb-16">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 md:mb-4">
-              Everything you need for{' '}
-              <span className="bg-gradient-to-r from-brand-400 to-violet-400 bg-clip-text text-transparent">
-                ML Pipeline Design
-              </span>
-            </h2>
-            <p className="text-neutral-400 text-sm md:text-lg max-w-2xl mx-auto">
-              Powerful features to design, validate, and deploy production-ready ML pipelines
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {features.map((feature, i) => (
-              <div 
-                key={i}
-                className="group relative p-6 md:p-8 rounded-2xl bg-neutral-900/50 border border-white/5 hover:border-white/10 transition-all duration-500 hover:-translate-y-1"
-              >
-                <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-4 md:mb-6 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                  <feature.icon className="w-6 h-6 md:w-7 md:h-7 text-white" />
-                </div>
-                <h3 className="text-lg md:text-xl font-semibold mb-2 md:mb-3 text-white">{feature.title}</h3>
-                <p className="text-neutral-400 text-sm md:text-base leading-relaxed">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section id="how-it-works" className="relative z-10 py-16 md:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 md:mb-16">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 md:mb-4">
-              How it{' '}
-              <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                Works
-              </span>
-            </h2>
-            <p className="text-neutral-400 text-sm md:text-lg max-w-2xl mx-auto">
-              Design your ML pipeline in three simple steps
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 md:gap-12">
-            {[
-              { step: '01', title: 'Define Constraints', desc: 'Set your cost, carbon, latency, and compliance requirements' },
-              { step: '02', title: 'AI Generates Design', desc: 'Our AI creates optimized pipeline designs matching your constraints' },
-              { step: '03', title: 'Deploy & Monitor', desc: 'Deploy to your preferred environment and monitor in real-time' }
-            ].map((item, i) => (
-              <div key={i} className="relative text-center md:text-left">
-                <div className="text-6xl md:text-8xl font-bold text-white/[0.03] absolute -top-2 -left-0 md:-left-4">{item.step}</div>
-                <div className="relative pt-8 md:pt-12">
-                  <h3 className="text-xl md:text-2xl font-bold mb-3 text-white">{item.title}</h3>
-                  <p className="text-neutral-400 text-sm md:text-base">{item.desc}</p>
-                </div>
-                {i < 2 && (
-                  <ArrowRight className="hidden md:block absolute top-1/2 -right-6 w-8 h-8 text-neutral-600 rotate-90 md:rotate-0" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section id="testimonials" className="relative z-10 py-16 md:py-24 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12 md:mb-16">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 md:mb-4">
-              Loved by{' '}
-              <span className="bg-gradient-to-r from-brand-400 to-pink-400 bg-clip-text text-transparent">
-                ML Teams
-              </span>
-            </h2>
-            <p className="text-neutral-400 text-sm md:text-lg max-w-2xl mx-auto">
-              See what teams are saying about System2ML
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8">
-            {testimonials.map((testimonial, i) => (
-              <div key={i} className="relative p-6 md:p-8 rounded-2xl bg-neutral-900/50 border border-white/5">
-                <div className="flex gap-1 mb-4">
-                  {[...Array(testimonial.rating)].map((_, j) => (
-                    <Star key={j} className="w-4 h-4 fill-warning-500 text-warning-500" />
+        {/* Intelligence Preview Section */}
+        <section id="intelligence" className="py-40 px-6 relative">
+          <div className="max-w-[1400px] mx-auto">
+            <div className="grid lg:grid-cols-2 gap-20 items-center">
+              <div className="animate-fade-in">
+                <h2 className="text-5xl md:text-7xl font-bold mb-8 leading-tight">
+                  Evolving Intelligence <br />
+                  <span className="text-neutral-500">In Real-Time.</span>
+                </h2>
+                <p className="text-xl text-neutral-400 mb-10 leading-relaxed">
+                  Our platform visualizes the complex intersection of data science and business value.
+                  Watch as the AI Designer iterates through millions of permutations to find the
+                  single most efficient pipeline for your hardware target.
+                </p>
+                <ul className="space-y-6">
+                  {[
+                    { icon: Zap, text: 'Self-optimizing hyperparameter optimization' },
+                    { icon: Shield, text: 'Real-time drift detection and recovery' },
+                    { icon: Leaf, text: 'Carbon-aware compute orchestration' }
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-center gap-4 text-lg font-medium text-neutral-300">
+                      <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center border border-brand-500/20">
+                        <item.icon className="w-5 h-5 text-brand-400" />
+                      </div>
+                      {item.text}
+                    </li>
                   ))}
-                </div>
-                <Quote className="absolute top-4 right-4 w-8 h-8 text-neutral-800" />
-                <p className="text-neutral-300 mb-6 leading-relaxed">&ldquo;{testimonial.content}&rdquo;</p>
-                <div className="flex items-center gap-3">
-                  <img 
-                    src={testimonial.avatar} 
-                    alt={testimonial.name}
-                    className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-white/10"
+                </ul>
+              </div>
+
+              <div className="relative animate-fade-in delay-300">
+                <div className="absolute -inset-10 bg-brand-500/20 blur-[100px] rounded-full opacity-30" />
+                <div className="glass-morphism p-4 rounded-[40px] overflow-hidden transform lg:rotate-3 hover:rotate-0 transition-all duration-700 shadow-3xl">
+                  <img
+                    src="/premium_dashboard_preview_mockup_1772198662447.png"
+                    alt="Platform Dashboard"
+                    className="rounded-[30px] w-full border border-white/10"
                   />
-                  <div>
-                    <div className="font-semibold text-white text-sm md:text-base">{testimonial.name}</div>
-                    <div className="text-neutral-500 text-xs md:text-sm">{testimonial.role}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Features Overhaul */}
+        <section id="features" className="py-40 px-6 bg-white/[0.01]">
+          <div className="max-w-[1400px] mx-auto">
+            <div className="flex flex-col md:flex-row items-end justify-between mb-24 gap-8">
+              <div className="max-w-2xl">
+                <h2 className="text-5xl md:text-7xl font-bold mb-6">Built for the <br /> <span className="text-gradient-brand">Enterprise Scale.</span></h2>
+                <p className="text-xl text-neutral-400">Everything you need from local development to edge-optimized production deployments.</p>
+              </div>
+              <Button size="lg" className="h-14 px-8 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 font-bold">
+                View All Features <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {features.map((feature, i) => (
+                <div key={i} className={`glass-card p-10 group relative h-full flex flex-col`}>
+                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-10 shadow-lg group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 ${feature.glow}`}>
+                    <feature.icon className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold mb-4 text-white">{feature.title}</h3>
+                  <p className="text-neutral-400 leading-relaxed text-lg mb-8">{feature.description}</p>
+                  <div className="mt-auto pt-4 flex items-center text-sm font-black tracking-widest text-neutral-500 uppercase group-hover:text-white transition-colors">
+                    Learn more <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA Section */}
-      <section className="relative z-10 py-16 md:py-24">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6">
-          <div className="relative rounded-2xl md:rounded-3xl bg-gradient-to-br from-brand-900/50 via-neutral-900 to-violet-900/50 border border-white/10 p-8 md:p-12 lg:p-16 text-center overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-violet-500/10" />
-            <div className="relative z-10">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-6">
-                Ready to build smarter pipelines?
+        {/* Final CTA: Extreme Impact */}
+        <section className="py-40 px-6">
+          <div className="max-w-5xl mx-auto">
+            <div className="relative glass-morphism p-16 md:p-24 rounded-[60px] text-center overflow-hidden border-2 border-white/5">
+              <div className="absolute top-0 right-0 w-[50%] h-[50%] bg-brand-500/10 blur-[120px] -z-10" />
+              <div className="absolute bottom-0 left-0 w-[50%] h-[50%] bg-violet-500/10 blur-[120px] -z-10" />
+
+              <h2 className="text-5xl md:text-7xl font-black mb-8 leading-tight">
+                THE FUTURE OF <br /> ML IS <span className="text-gradient-brand">AUTONOMOUS</span>.
               </h2>
-              <p className="text-neutral-400 text-sm md:text-xl mb-8 md:mb-10 max-w-xl mx-auto">
-                Join thousands of teams designing ML pipelines with AI-powered constraint validation
+              <p className="text-xl md:text-2xl text-neutral-400 mb-14 max-w-2xl mx-auto">
+                Join the elite teams building robust, ethical, and highly-efficient machine learning infrastructure.
               </p>
-              <Link href="/dashboard">
-                <Button size="xl" className="w-full sm:w-auto h-12 md:h-14 px-8 md:px-10 text-base md:text-lg bg-white text-neutral-900 hover:bg-neutral-100 border-0 shadow-xl transition-all duration-300 hover:scale-105 font-semibold">
-                  Get Started Free
-                </Button>
-              </Link>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 md:gap-6 mt-6 md:mt-8 text-xs md:text-sm text-neutral-500">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  No credit card required
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  14-day free trial
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                <Link href="/dashboard">
+                  <Button size="xl" className="h-16 px-12 rounded-2xl bg-brand-500 text-white font-black text-lg hover:bg-brand-600 shadow-[0_0_30px_-5px_var(--brand-500)] hover:scale-105 transition-all duration-500">
+                    Get Started Now
+                  </Button>
+                </Link>
+                <div className="text-sm font-bold text-neutral-500 tracking-widest uppercase text-center sm:text-left">
+                  No Commitment Required
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-white/10 py-8 md:py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
+      {/* Extreme Footer */}
+      <footer className="border-t border-white/5 py-20 px-6 bg-black">
+        <div className="max-w-[1400px] mx-auto grid md:grid-cols-4 gap-16">
+          <div className="col-span-2">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-8 h-8 rounded-xl bg-brand-500 flex items-center justify-center">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <span className="text-lg font-semibold">System2ML</span>
+              <span className="text-xl font-black tracking-tighter">SYSTEM2ML</span>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-4 md:gap-8 text-xs md:text-sm text-neutral-500">
-              <a href="#" className="hover:text-white transition-colors">Privacy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms</a>
-              <a href="#" className="hover:text-white transition-colors">Documentation</a>
-              <a href="#" className="hover:text-white transition-colors">Support</a>
+            <p className="text-neutral-500 max-w-sm mb-8 font-medium">
+              Revolutionizing enterprise AI with constraint-aware autonomous pipeline orchestration.
+              Built for speed. Designed for precision.
+            </p>
+            <div className="flex gap-4">
+              {[Globe, MonitorSmartphone, Lock].map((Icn, i) => (
+                <div key={i} className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center hover:bg-white/5 transition-colors cursor-pointer text-neutral-400 hover:text-white">
+                  <Icn className="w-4 h-4" />
+                </div>
+              ))}
             </div>
-            <div className="text-xs md:text-sm text-neutral-600">
-              2026 System2ML. All rights reserved.
-            </div>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs uppercase tracking-[0.2em] mb-8 text-white">Platform</h4>
+            <ul className="space-y-4 text-neutral-500 font-bold text-sm">
+              <li><a href="#" className="hover:text-white transition-colors">AI Designer</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Governence</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Observability</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-black text-xs uppercase tracking-[0.2em] mb-8 text-white">Company</h4>
+            <ul className="space-y-4 text-neutral-500 font-bold text-sm">
+              <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Documentation</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+            </ul>
+          </div>
+        </div>
+        <div className="max-w-[1400px] mx-auto pt-16 mt-16 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 text-xs font-black tracking-widest text-neutral-600 uppercase">
+          <div>&copy; 2026 SYSTEM2ML OPS. ALL RIGHTS RESERVED.</div>
+          <div className="flex gap-8">
+            <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
+            <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
           </div>
         </div>
       </footer>
     </div>
   )
 }
+
+const Leaf = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 2 7a7 7 0 0 1-7 7c-.7 0-1.3-.1-1.9-.3" />
+    <path d="M11 20h4a2 2 0 0 0 2-2v-1" />
+    <path d="M11 20H7a2 2 0 0 1-2-2v-1" />
+    <path d="M14 16L9 11" />
+  </svg>
+)

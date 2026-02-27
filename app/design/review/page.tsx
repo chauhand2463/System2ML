@@ -3,25 +3,27 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { useDesign } from '@/hooks/use-design'
-import { generateCandidates, validateExecution, PipelineCandidate } from '@/lib/api'
+import { useDesign, PipelineCandidate as UPPipelineCandidate } from '@/hooks/use-design'
+import { useWorkflow } from '@/hooks/use-workflow'
+import { generateCandidates, validateExecution, PipelineCandidate as ApiPipelineCandidate, DesignRequest } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
-  Database, BarChart3, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, 
+import {
+  Database, BarChart3, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle,
   Shield, Zap, DollarSign, Leaf, Clock, Loader2
 } from 'lucide-react'
 
 export default function DesignReviewPage() {
   const router = useRouter()
-  const { 
-    dataset, constraints, setConstraints, setPipelineCandidates, 
-    setFeasibilityPassed, setDesignStep, canProceedToDesign 
+  const {
+    dataset, constraints, setConstraints, setPipelineCandidates,
+    setFeasibilityPassed, setDesignStep, canProceedToDesign
   } = useDesign()
-  
+  const { projectId } = useWorkflow()
+
   const [generating, setGenerating] = useState(false)
-  const [candidates, setCandidates] = useState<PipelineCandidate[]>([])
+  const [candidates, setCandidates] = useState<UPPipelineCandidate[]>([])
   const [feasibleCount, setFeasibleCount] = useState(0)
   const [validated, setValidated] = useState(false)
 
@@ -37,23 +39,24 @@ export default function DesignReviewPage() {
 
   const handleGenerate = async () => {
     setGenerating(true)
-    
+
     try {
-      const request = {
+      const request: Partial<DesignRequest> = {
+        project_id: projectId,
         data_profile: { type: dataset.type },
-        objective: constraints.objective,
+        objective: constraints.objective as any,
         constraints: {
           max_cost_usd: constraints.maxCostUsd,
           max_carbon_kg: constraints.maxCarbonKg,
           max_latency_ms: constraints.maxLatencyMs,
-          compliance_level: constraints.complianceLevel,
+          compliance_level: constraints.complianceLevel as any,
         },
-        deployment: 'batch',
+        deployment: 'batch' as const,
       }
-      
+
       const result = await generateCandidates(request)
-      
-      const mappedCandidates: PipelineCandidate[] = result.candidates.map((c: any) => ({
+
+      const mappedCandidates: UPPipelineCandidate[] = result.candidates.map((c: any) => ({
         id: c.id,
         name: c.name,
         description: c.description,
@@ -65,13 +68,13 @@ export default function DesignReviewPage() {
         violatesConstraints: c.violates_constraints || [],
         isFeasible: !c.violates_constraints?.length,
       }))
-      
+
       setCandidates(mappedCandidates)
       setFeasibleCount(result.feasible_count)
       setFeasibilityPassed(result.feasible_count > 0)
       setValidated(true)
       setPipelineCandidates(mappedCandidates)
-      
+
     } catch (error) {
       console.error('Generation error:', error)
     } finally {
@@ -210,13 +213,13 @@ export default function DesignReviewPage() {
                       )}
                       <div>
                         <p className="text-white font-medium">
-                          {feasibleCount > 0 
+                          {feasibleCount > 0
                             ? `${feasibleCount} Feasible Pipeline${feasibleCount > 1 ? 's' : ''} Found`
                             : 'No Feasible Pipelines'
                           }
                         </p>
                         <p className="text-neutral-400 text-sm">
-                          {feasibleCount > 0 
+                          {feasibleCount > 0
                             ? 'You can proceed to select a pipeline'
                             : 'Try adjusting your constraints'
                           }
@@ -242,11 +245,10 @@ export default function DesignReviewPage() {
                 {candidates.map((candidate) => (
                   <div
                     key={candidate.id}
-                    className={`p-4 rounded-xl border ${
-                      candidate.isFeasible
-                        ? 'bg-emerald-500/5 border-emerald-500/20'
-                        : 'bg-red-500/5 border-red-500/20'
-                    }`}
+                    className={`p-4 rounded-xl border ${candidate.isFeasible
+                      ? 'bg-emerald-500/5 border-emerald-500/20'
+                      : 'bg-red-500/5 border-red-500/20'
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">

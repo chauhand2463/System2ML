@@ -8,18 +8,20 @@ import { validateExecution } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
-  Database, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, 
+import { useWorkflow } from '@/hooks/use-workflow'
+import {
+  Database, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle,
   Shield, Zap, DollarSign, Leaf, Clock, Target, Check
 } from 'lucide-react'
 
 export default function DesignResultsPage() {
   const router = useRouter()
-  const { 
-    dataset, constraints, pipelineCandidates, setSelectedPipeline, 
-    setSafetyGatePassed, setDesignStep, canProceedToDesign 
+  const {
+    dataset, constraints, pipelineCandidates, setSelectedPipeline,
+    setSafetyGatePassed, setDesignStep, canProceedToDesign
   } = useDesign()
-  
+  const { projectId } = useWorkflow()
+
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [safetyValidated, setSafetyValidated] = useState(false)
   const [validating, setValidating] = useState(false)
@@ -52,7 +54,7 @@ export default function DesignResultsPage() {
   const handleValidateAndSelect = async (candidate: PipelineCandidate) => {
     setSelectedId(candidate.id)
     setValidating(true)
-    
+
     try {
       const result = await validateExecution(
         {
@@ -64,12 +66,13 @@ export default function DesignResultsPage() {
           max_cost_usd: constraints.maxCostUsd,
           max_carbon_kg: constraints.maxCarbonKg,
           max_latency_ms: constraints.maxLatencyMs,
-        }
+        },
+        projectId
       )
-      
+
       setSafetyValidated(result.can_execute)
       setSafetyGatePassed(result.can_execute)
-      
+
       if (result.can_execute) {
         setSelectedPipeline(candidate)
       }
@@ -114,7 +117,7 @@ export default function DesignResultsPage() {
                   <div>
                     <p className="text-white font-medium">{dataset.name}</p>
                     <p className="text-neutral-400 text-sm">
-                      {constraints.maxCostUsd} • {constraints.maxCarbonKg}kg • {constraints.maxLatencyMs}ms
+                      {dataset.sizeMb > 1 ? `${dataset.sizeMb.toFixed(1)} MB` : `${(dataset.sizeMb * 1024).toFixed(1)} KB`} • {constraints.maxCarbonKg}kg • {constraints.maxLatencyMs}ms
                     </p>
                   </div>
                 </div>
@@ -130,25 +133,23 @@ export default function DesignResultsPage() {
             {pipelineCandidates.map((candidate) => {
               const isSelected = selectedId === candidate.id
               const isFeasible = candidate.isFeasible
-              
+
               return (
-                <Card 
+                <Card
                   key={candidate.id}
-                  className={`bg-neutral-900/50 border transition-all cursor-pointer ${
-                    isSelected 
-                      ? 'border-brand-500 ring-1 ring-brand-500' 
-                      : isFeasible 
-                        ? 'border-neutral-700 hover:border-emerald-500/50' 
-                        : 'border-red-500/20 opacity-60'
-                  }`}
+                  className={`bg-neutral-900/50 border transition-all cursor-pointer ${isSelected
+                    ? 'border-brand-500 ring-1 ring-brand-500'
+                    : isFeasible
+                      ? 'border-neutral-700 hover:border-emerald-500/50'
+                      : 'border-red-500/20 opacity-60'
+                    }`}
                   onClick={() => isFeasible && handleValidateAndSelect(candidate)}
                 >
                   <CardContent className="pt-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
-                        <div className={`p-2 rounded-lg ${
-                          isFeasible ? 'bg-emerald-500/20' : 'bg-red-500/20'
-                        }`}>
+                        <div className={`p-2 rounded-lg ${isFeasible ? 'bg-emerald-500/20' : 'bg-red-500/20'
+                          }`}>
                           {isFeasible ? (
                             <CheckCircle className="w-5 h-5 text-emerald-400" />
                           ) : (
@@ -158,7 +159,7 @@ export default function DesignResultsPage() {
                         <div>
                           <h3 className="text-lg font-semibold text-white">{candidate.name}</h3>
                           <p className="text-neutral-400 text-sm">{candidate.description}</p>
-                          
+
                           {/* Model Family Badge */}
                           <div className="mt-2">
                             <Badge className="bg-brand-500/20 text-brand-400">
@@ -167,7 +168,7 @@ export default function DesignResultsPage() {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Metrics */}
                       <div className="grid grid-cols-4 gap-4 text-right">
                         <div>
@@ -188,7 +189,7 @@ export default function DesignResultsPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Violations */}
                     {!isFeasible && candidate.violatesConstraints.length > 0 && (
                       <div className="mt-4 pt-3 border-t border-red-500/20">
@@ -201,7 +202,7 @@ export default function DesignResultsPage() {
                         ))}
                       </div>
                     )}
-                    
+
                     {/* Selection Indicator */}
                     {isSelected && safetyValidated && (
                       <div className="mt-4 pt-3 border-t border-brand-500/20">

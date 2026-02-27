@@ -1,602 +1,303 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { useDesign, DatasetProfile } from '@/hooks/use-design'
-import { profileDataset, validateDataset, DatasetProfileRequest, uploadDataset } from '@/lib/api'
+import { useDesign } from '@/hooks/use-design'
+import { useWorkflow } from '@/hooks/use-workflow'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Progress } from '@/components/ui/progress'
-import { 
-  Upload, Database, Link2, FileSpreadsheet, Image, FileText, 
-  Loader2, AlertTriangle, CheckCircle, ArrowRight, Shield,
-  BarChart3, Clock, HardDrive, Tag
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  Upload, FileSpreadsheet, CheckCircle, AlertTriangle, AlertCircle,
+  Shield, Trash2, ArrowRight, Loader2, FileText, BarChart3
 } from 'lucide-react'
 
-type DataSource = 'upload' | 'connection' | 'existing'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-interface ProfilingState {
-  status: 'idle' | 'profiling' | 'validating' | 'complete' | 'error'
-  progress: number
-  error?: string
+interface DatasetProfile {
+  name: string
+  source: string
+  type: string
+  sizeMb: number
+  rows: number
+  columns: number
+  features: number
+  labelPresent: boolean
+  labelColumn?: string
+  labelType?: string
+  inferredTask: string
 }
 
 export default function NewDatasetPage() {
   const router = useRouter()
   const { setDataset, setDesignStep } = useDesign()
-  
-  const [source, setSource] = useState<DataSource>('upload')
+  const { projectId, transitionState } = useWorkflow()
   const [file, setFile] = useState<File | null>(null)
-  const [connectionConfig, setConnectionConfig] = useState({
-    type: 's3',
-    bucket: '',
-    path: '',
-  })
-  const [existingDatasetId, setExistingDatasetId] = useState('')
-  const [profilingState, setProfilingState] = useState<ProfilingState>({
-    status: 'idle',
-    progress: 0,
-  })
-  const [profileResult, setProfileResult] = useState<DatasetProfile | null>(null)
-  const [validationResult, setValidationResult] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [localProfile, setLocalProfile] = useState<any | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0])
+      setLocalProfile(null)
+      setError(null)
+      setSuccess(null)
     }
   }
 
-  const handleProfiling = async () => {
-    setProfilingState({ status: 'profiling', progress: 10 })
-    
-    const progressInterval = setInterval(() => {
-      setProfilingState(prev => ({
-        ...prev,
-        progress: Math.min(prev.progress + Math.random() * 20, 90),
-      }))
-    }, 300)
+  const handleUpload = async () => {
+    if (!file) return
+
+    setIsLoading(true)
+    setError(null)
+    setLocalProfile(null)
 
     try {
-      let request: DatasetProfileRequest
-      
-      if (source === 'upload' && file) {
-        // Try to upload the file first
-        try {
-          await uploadDataset(file)
-        } catch (uploadErr) {
-          console.warn('Upload failed, continuing with metadata:', uploadErr)
-        }
-        
-        const fileType = file.name.split('.').pop() as 'csv' | 'parquet' | 'json' | 'image' | 'text' | undefined
-        
-        // Don't send file_size_mb - backend computes it from disk
-        request = {
+      // Step 1: Upload file
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const uploadRes = await fetch(`${API_BASE}/api/datasets/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload file')
+      }
+
+      const uploadData = await uploadRes.json()
+      console.log('Upload result:', uploadData)
+
+      // Step 2: Profile the dataset
+      const profileRes = await fetch(`${API_BASE}/api/datasets/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: projectId,
           source: 'upload',
           file_name: file.name,
-          file_type: fileType,
-        }
-      } else if (source === 'connection') {
-        request = {
-          source: 'connection',
-          connection_config: {
-            ...connectionConfig,
-            source_name: connectionConfig.bucket || 'data_source',
-            size_mb: 10.0,
-          },
-        }
-      } else {
-        request = {
-          source: 'existing',
-          dataset_id: existingDatasetId,
-        }
-      }
-
-      const result = await profileDataset(request)
-      clearInterval(progressInterval)
-      
-      console.log('Profile result:', result)
-      
-      if (!result || !result.dataset) {
-        setProfilingState({ status: 'error', progress: 0, error: 'Failed to profile dataset - no response' })
-        return
-      }
-      
-      setProfilingState({ status: 'complete', progress: 100 })
-      
-      const ds = result.dataset
-      
-      // Convert API response to DatasetProfile format
-      const mappedProfile: DatasetProfile = {
-        name: ds.name || 'dataset',
-        source: ds.source || 'upload',
-        type: ds.type || 'tabular',
-        sizeMb: ds.size_mb || ds.sizeMb || 0,
-        rows: ds.rows,
-        columns: ds.columns,
-        features: ds.features,
-        labelType: ds.label_type || ds.labelType,
-        labelPresent: ds.label_present || ds.labelPresent || true,
-        missingValues: ds.missing_percentage || ds.missingValues || 0,
-        classBalance: ds.class_balance || ds.classBalance,
-        piiDetected: ds.pii_detected || ds.piiDetected || false,
-        piiFields: ds.pii_fields || ds.piiFields,
-        createdAt: ds.profile_timestamp || ds.createdAt || new Date().toISOString(),
-        inferredTask: ds.inferred_task || ds.inferredTask,
-      }
-      setProfileResult(mappedProfile)
-      
-      // Call backend validation with dataset info
-      try {
-        const validation = await validateDataset({
-          dataset: ds,
-          constraints: {},
-        })
-        setValidationResult(validation)
-        
-        // Check for validation errors - block if status is 'blocked' or invalid
-        if (validation.status === 'blocked' || validation.errors?.length > 0) {
-          const errorMsg = validation.errors?.map((e: any) => e.message).join('; ') || 'Validation blocked'
-          setProfilingState({ status: 'error', progress: 50, error: errorMsg })
-          return
-        }
-        
-        setProfilingState({ status: 'complete', progress: 100 })
-      } catch (valError: any) {
-        console.error('Validation error:', valError)
-        setValidationResult({ status: 'valid', errors: [] })
-        setProfilingState({ status: 'complete', progress: 100 })
-      }
-      
-    } catch (error: any) {
-      clearInterval(progressInterval)
-      setProfilingState({ 
-        status: 'error', 
-        progress: 0,
-        error: error.message || 'Failed to profile dataset'
+          file_type: file.name.split('.').pop() || 'csv',
+        }),
       })
+
+      const profileData = await profileRes.json()
+      console.log('Profile result:', profileData)
+
+      if (profileData.status === 'failed') {
+        const errMsg = profileData.errors?.map((e: any) => e.message).join(', ') || 'Failed to profile'
+        throw new Error(errMsg)
+      }
+
+      const ds = profileData.dataset || profileData.profile
+
+      // Step 3: Check validation - simple check
+      if (!ds || ds.features === 0) {
+        throw new Error('Invalid dataset: 0 features. Please check your CSV file.')
+      }
+
+      if (ds.columns < 2) {
+        throw new Error('Dataset needs at least 2 columns (features + label)')
+      }
+
+      if (ds.inferred_task === 'unknown') {
+        throw new Error('Could not determine task. Add a label column with numeric or text values.')
+      }
+
+      // Build profile for hook - map field names correctly (snake_case to camelCase)
+      const hookProfile = {
+        name: ds.name || file.name,
+        source: 'upload' as const,
+        type: (ds.type || 'tabular') as any,
+        sizeMb: ds.size_mb || 0,
+        rows: ds.rows || 0,
+        columns: ds.columns || 0,
+        features: ds.features || 0,
+        labelType: ds.label_type,
+        labelPresent: ds.label_present || false,
+        missingValues: ds.missing_percentage || 0,
+        piiDetected: ds.pii_detected || false,
+        piiFields: ds.pii_fields || [],
+        createdAt: new Date().toISOString(),
+        inferredTask: ds.inferred_task || 'classification',
+      }
+
+      setLocalProfile(hookProfile)
+      setDataset(hookProfile)
+      setSuccess('Dataset validated successfully!')
+
+      // Step 4: Transition backend state
+      if (projectId) {
+        await transitionState('DATASET_PROFILED', hookProfile)
+        // Also transition to VALIDATED since we did local validation above
+        await transitionState('DATASET_VALIDATED', { status: 'approved' })
+      }
+
+    } catch (err: any) {
+      console.error('Error:', err)
+      setError(err.message || 'Something went wrong')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleProceedToDesign = () => {
-    // Additional validation checks before proceeding
-    if (!profileResult) return
-    
-    if (profileResult.features === 0) {
-      alert('Cannot proceed: Dataset has 0 feature columns. Please upload a valid dataset.')
-      return
-    }
-    
-    if (profileResult.inferredTask === 'unknown') {
-      alert('Cannot proceed: Unable to infer ML task. Please check your dataset has a valid label column.')
-      return
-    }
-    
-    if (profileResult.type === 'unknown') {
-      alert('Cannot proceed: Unknown data type. Please upload a valid CSV file.')
-      return
-    }
-    
-    if (validationResult?.status === 'blocked' || (validationResult?.errors && validationResult.errors.length > 0)) {
-      alert('Cannot proceed: Validation failed. Please fix the errors above.')
-      return
-    }
-    
-    if (profileResult && (validationResult?.status === 'valid' || validationResult?.is_valid || validationResult?.status === 'approved')) {
-      setDataset(profileResult)
-      setDesignStep('input')
-      router.push('/design/input')
-    }
-  }
-
-  const isValidationPassed = validationResult?.status === 'valid' || validationResult?.is_valid === true || validationResult?.status === 'approved'
-  const isValidationBlocked = validationResult?.status === 'blocked' || (validationResult?.errors && validationResult.errors.length > 0)
-
-  const getFileIcon = () => {
-    if (!file) return <FileSpreadsheet className="w-8 h-8" />
-    const ext = file.name.split('.').pop()?.toLowerCase()
-    if (ext === 'csv') return <FileSpreadsheet className="w-8 h-8 text-emerald-400" />
-    if (ext === 'json') return <FileText className="w-8 h-8 text-blue-400" />
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(ext || '')) return <Image className="w-8 h-8 text-purple-400" />
-    return <FileText className="w-8 h-8 text-neutral-400" />
+  const handleProceed = () => {
+    if (!localProfile) return
+    setDesignStep('input')
+    router.push('/design/input')
   }
 
   return (
     <DashboardLayout>
       <div className="p-8 min-h-screen">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Dataset Intake & Profiling</h1>
-            <p className="text-neutral-400">
-              Upload or connect your data to begin pipeline design
-            </p>
-          </div>
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-3xl font-bold text-white mb-2">Dataset Upload</h1>
+          <p className="text-neutral-400 mb-8">
+            Upload a CSV file to create your ML pipeline
+          </p>
 
-          <div className="grid gap-6">
-            {/* Data Source Selection */}
-            <Card className="bg-neutral-900/50 border-white/5">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Database className="w-5 h-5 text-brand-400" />
-                  Select Data Source
-                </CardTitle>
-                <CardDescription className="text-neutral-400">
-                  Choose how to provide your dataset
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Tabs value={source} onValueChange={(v) => setSource(v as DataSource)}>
-                  <TabsList className="grid w-full grid-cols-3 bg-neutral-800">
-                    <TabsTrigger value="upload" className="data-[state=active]:bg-brand-500">
-                      <Upload className="w-4 h-4 mr-2" /> Upload
-                    </TabsTrigger>
-                    <TabsTrigger value="connection" className="data-[state=active]:bg-brand-500">
-                      <Link2 className="w-4 h-4 mr-2" /> Connect
-                    </TabsTrigger>
-                    <TabsTrigger value="existing" className="data-[state=active]:bg-brand-500">
-                      <Database className="w-4 h-4 mr-2" /> Existing
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="upload" className="mt-4">
-                    <div className="border-2 border-dashed border-neutral-700 rounded-xl p-8 text-center hover:border-brand-500/50 transition-colors">
-                      <input
-                        type="file"
-                        onChange={handleFileChange}
-                        className="hidden"
-                        id="file-upload"
-                        accept=".csv,.parquet,.json,.jpg,.jpeg,.png,.txt"
-                      />
-                      <label htmlFor="file-upload" className="cursor-pointer">
-                        <div className="flex flex-col items-center">
-                          {getFileIcon()}
-                          {file ? (
-                            <div className="mt-4">
-                              <p className="text-white font-medium">{file.name}</p>
-                              <p className="text-neutral-500 text-sm">
-                                {(file.size / 1024).toFixed(1)} KB
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="mt-4">
-                              <p className="text-white font-medium">Drop your dataset here</p>
-                              <p className="text-neutral-500 text-sm">
-                                CSV, Parquet, JSON, Images, or Text files
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </label>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="connection" className="mt-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-neutral-400">Source Type</Label>
-                        <select
-                          value={connectionConfig.type}
-                          onChange={(e) => setConnectionConfig({ ...connectionConfig, type: e.target.value })}
-                          className="w-full mt-1 px-3 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white"
-                        >
-                          <option value="s3">Amazon S3</option>
-                          <option value="gcs">Google Cloud Storage</option>
-                          <option value="db">Database</option>
-                          <option value="api">API</option>
-                        </select>
-                      </div>
-                      <div>
-                        <Label className="text-neutral-400">Bucket / Database</Label>
-                        <Input
-                          value={connectionConfig.bucket}
-                          onChange={(e) => setConnectionConfig({ ...connectionConfig, bucket: e.target.value })}
-                          placeholder="my-bucket"
-                          className="mt-1 bg-neutral-800 border-neutral-700 text-white"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Label className="text-neutral-400">Path</Label>
-                        <Input
-                          value={connectionConfig.path}
-                          onChange={(e) => setConnectionConfig({ ...connectionConfig, path: e.target.value })}
-                          placeholder="/data/dataset.csv"
-                          className="mt-1 bg-neutral-800 border-neutral-700 text-white"
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="existing" className="mt-4 space-y-4">
+          <Card className="bg-neutral-900/50 border-white/5">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Upload className="w-5 h-5 text-brand-400" />
+                Upload CSV Dataset
+              </CardTitle>
+              <CardDescription className="text-neutral-400">
+                Your CSV should have: header row, at least 2 columns, and a label/target column
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* File Input */}
+              <div className="border-2 border-dashed border-neutral-700 rounded-xl p-8 text-center hover:border-brand-500/50 transition-colors">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  {file ? (
                     <div>
-                      <Label className="text-neutral-400">Dataset ID</Label>
-                      <Input
-                        value={existingDatasetId}
-                        onChange={(e) => setExistingDatasetId(e.target.value)}
-                        placeholder="Enter existing dataset ID"
-                        className="mt-1 bg-neutral-800 border-neutral-700 text-white"
-                      />
+                      <FileSpreadsheet className="w-12 h-12 text-emerald-400 mx-auto" />
+                      <p className="text-white font-medium mt-3">{file.name}</p>
+                      <p className="text-neutral-500 text-sm">
+                        {(file.size / 1024).toFixed(1)} KB
+                      </p>
                     </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
+                  ) : (
+                    <div>
+                      <Upload className="w-12 h-12 text-neutral-500 mx-auto" />
+                      <p className="text-white font-medium mt-3">Click to upload CSV</p>
+                      <p className="text-neutral-500 text-sm">or drag and drop</p>
+                    </div>
+                  )}
+                </label>
+              </div>
 
-            {/* Profiling Button */}
-            <div className="flex justify-center">
+              {/* Upload Button */}
               <Button
-                onClick={handleProfiling}
-                disabled={profilingState.status === 'profiling' || profilingState.status === 'validating'}
-                className="bg-gradient-to-r from-brand-500 to-brand-600 px-8"
+                onClick={handleUpload}
+                disabled={!file || isLoading}
+                className="w-full bg-brand-600 hover:bg-brand-700"
                 size="lg"
               >
-                {profilingState.status === 'profiling' || profilingState.status === 'validating' ? (
+                {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {profilingState.status === 'profiling' ? 'Profiling Dataset...' : 'Validating...'}
+                    Processing...
                   </>
                 ) : (
                   <>
                     <BarChart3 className="w-4 h-4 mr-2" />
-                    Profile Dataset
+                    Upload & Validate
                   </>
                 )}
               </Button>
-            </div>
 
-            {/* Progress Bar */}
-            {profilingState.status !== 'idle' && (
-              <Progress value={profilingState.progress} className="h-2" />
-            )}
-
-            {/* Error State */}
-            {profilingState.status === 'error' && (
-              <Card className="bg-red-500/10 border-red-500/20">
-                <CardContent className="pt-6">
+              {/* Error */}
+              {error && (
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
                   <div className="flex items-center gap-2 text-red-400">
                     <AlertTriangle className="w-5 h-5" />
-                    <span>{profilingState.error}</span>
+                    <span className="font-semibold">Error</span>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                  <p className="text-white mt-2">{error}</p>
+                </div>
+              )}
 
-            {/* Profile Results */}
-            {profileResult && profilingState.status === 'complete' && (
-              <Card className="bg-neutral-900/50 border-white/5">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
-                    Dataset Profile Complete
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Validation Status */}
-                  {validationResult && (
-                    <div className={`p-4 rounded-xl ${
-                      validationResult.is_valid 
-                        ? 'bg-emerald-500/10 border border-emerald-500/20' 
-                        : 'bg-red-500/10 border border-red-500/20'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        {validationResult.is_valid ? (
-                          <CheckCircle className="w-5 h-5 text-emerald-400" />
-                        ) : (
-                          <AlertTriangle className="w-5 h-5 text-red-400" />
-                        )}
-                        <span className={`font-medium ${
-                          validationResult.is_valid ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                          {validationResult.is_valid ? 'Dataset Validated' : 'Validation Failed'}
-                        </span>
-                      </div>
-                      
-                      {/* Violations */}
-                      {validationResult.violations?.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {validationResult.violations.map((v: any, i: number) => (
-                            <div key={i} className="flex items-start gap-2 text-sm">
-                              <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5" />
-                              <span className="text-neutral-300">{v.message}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {/* Suggestions */}
-                      {validationResult.suggestions?.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-neutral-700">
-                          <p className="text-sm text-neutral-400 mb-2">Suggestions:</p>
-                          {validationResult.suggestions.map((s: any, i: number) => (
-                            <div key={i} className="text-sm text-neutral-500 mb-1">
-                              • {s.reason}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Dataset Info Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="p-4 rounded-xl bg-neutral-800/50">
-                      <div className="flex items-center gap-2 text-neutral-400 mb-1">
-                        <HardDrive className="w-4 h-4" />
-                        <span className="text-sm">Size</span>
-                      </div>
-                      <p className="text-xl font-bold text-white">{profileResult?.sizeMb?.toFixed(1) || '0'} MB</p>
-                    </div>
-                    <div className="p-4 rounded-xl bg-neutral-800/50">
-                      <div className="flex items-center gap-2 text-neutral-400 mb-1">
-                        <BarChart3 className="w-4 h-4" />
-                        <span className="text-sm">Rows</span>
-                      </div>
-                      <p className="text-xl font-bold text-white">{profileResult?.rows?.toLocaleString() || '0'}</p>
-                    </div>
-                    <div className="p-4 rounded-xl bg-neutral-800/50">
-                      <div className="flex items-center gap-2 text-neutral-400 mb-1">
-                        <Tag className="w-4 h-4" />
-                        <span className="text-sm">Features</span>
-                      </div>
-                      <p className="text-xl font-bold text-white">{profileResult?.features || '0'}</p>
-                    </div>
-                    <div className="p-4 rounded-xl bg-neutral-800/50">
-                      <div className="flex items-center gap-2 text-neutral-400 mb-1">
-                        <Clock className="w-4 h-4" />
-                        <span className="text-sm">Missing</span>
-                      </div>
-                      <p className="text-xl font-bold text-white">{profileResult?.missingValues?.toFixed(1) || '0'}%</p>
-                    </div>
+              {/* PII Warning */}
+              {localProfile?.piiDetected && (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <Shield className="w-5 h-5" />
+                    <span className="font-semibold">PII Detected</span>
                   </div>
+                  <p className="text-white text-sm mt-2">
+                    Sensitive fields found: {localProfile.piiFields?.join(', ')}.
+                    Proceed with caution or anonymize later.
+                  </p>
+                </div>
+              )}
 
-                  {/* Additional Details */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-neutral-400">Data Type</Label>
-                      <Badge className="mt-1 bg-brand-500/20 text-brand-400">
-                        {profileResult?.type || 'unknown'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <Label className="text-neutral-400">Inferred Task</Label>
-                      <Badge className="mt-1 bg-purple-500/20 text-purple-400">
-                        {profileResult?.inferredTask || 'unknown'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <Label className="text-neutral-400">Label Present</Label>
-                      <div className="mt-1">
-                        {profileResult?.labelPresent ? (
-                          <Badge className="bg-emerald-500/20 text-emerald-400">
-                            Yes - {profileResult?.labelType}
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-red-500/20 text-red-400">No</Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-neutral-400">PII Detected</Label>
-                      <div className="mt-1">
-                        {profileResult?.piiDetected ? (
-                          <Badge className="bg-red-500/20 text-red-400">
-                            <Shield className="w-3 h-3 mr-1" />
-                            Yes
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-emerald-500/20 text-emerald-400">No</Badge>
-                        )}
-                      </div>
-                    </div>
+              {/* Success */}
+              {success && localProfile && !localProfile.piiDetected && (
+                <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <CheckCircle className="w-5 h-5" />
+                    <span className="font-semibold">{success}</span>
                   </div>
+                </div>
+              )}
 
-                  {/* PII Fields */}
-                  {profileResult?.piiDetected && profileResult?.piiFields && (
-                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-                      <div className="flex items-center gap-2 text-red-400 mb-2">
-                        <Shield className="w-4 h-4" />
-                        <span className="font-medium">PII Fields Detected</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {profileResult.piiFields.map((field: string, i: number) => (
-                          <Badge key={i} variant="outline" className="border-red-500/30 text-red-300">
-                            {field}
-                          </Badge>
-                        ))}
-                      </div>
+              {/* Profile Results */}
+              {localProfile && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div className="p-4 rounded-lg bg-neutral-800">
+                      <p className="text-neutral-400 text-sm">Rows</p>
+                      <p className="text-2xl font-bold text-white">{localProfile.rows}</p>
                     </div>
-                  )}
-
-                  {/* Class Balance */}
-                  {profileResult?.classBalance && (
-                    <div>
-                      <Label className="text-neutral-400">Class Balance</Label>
-                      <div className="mt-2 space-y-2">
-                        {Object.entries(profileResult.classBalance).map(([cls, count]) => (
-                          <div key={cls} className="flex items-center gap-2">
-                            <span className="text-sm text-neutral-300 w-20">{cls}</span>
-                            <Progress 
-                              value={(Number(count) / (profileResult?.rows || 1)) * 100} 
-                              className="flex-1 h-2"
-                            />
-                            <span className="text-sm text-neutral-400 w-16 text-right">
-                              {((Number(count) / (profileResult?.rows || 1)) * 100).toFixed(1)}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                    <div className="p-4 rounded-lg bg-neutral-800">
+                      <p className="text-neutral-400 text-sm">Features</p>
+                      <p className="text-2xl font-bold text-white">{localProfile.features}</p>
                     </div>
-                  )}
-
-                  {/* Blocking Errors */}
-                  {isValidationBlocked && (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-red-400">
-                        <AlertTriangle className="w-5 h-5" />
-                        <span className="font-semibold">Validation Blocked</span>
-                      </div>
-                      {(validationResult.errors || validationResult.violations || []).map((err: any, i: number) => (
-                        <div key={i} className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="text-sm text-neutral-500 font-mono">{err.code}</p>
-                              <p className="text-white font-medium mt-1">{err.message}</p>
-                              <p className="text-sm text-neutral-400 mt-1">Action: {err.action}</p>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-red-500/30 text-red-400 hover:bg-red-500/20"
-                              onClick={() => {
-                                if (err.action?.includes('anonymize')) {
-                                  alert('Anonymization feature coming soon')
-                                } else if (err.action?.includes('add_label')) {
-                                  alert('Please add a label column to your dataset')
-                                } else if (err.action?.includes('sample')) {
-                                  alert('Please sample or compress your dataset')
-                                } else {
-                                  alert('Please fix the issue and re-upload')
-                                }
-                              }}
-                            >
-                              {err.action?.replace(/_/g, ' ') || 'Fix'}
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="p-4 rounded-lg bg-neutral-800">
+                      <p className="text-neutral-400 text-sm">Columns</p>
+                      <p className="text-2xl font-bold text-white">{localProfile.columns}</p>
                     </div>
-                  )}
-
-                  {/* Proceed Button */}
-                  {isValidationPassed && (
-                    <div className="flex justify-end pt-4">
-                      <Button
-                        onClick={handleProceedToDesign}
-                        className="bg-gradient-to-r from-brand-500 to-brand-600"
-                        size="lg"
-                      >
-                        Proceed to Design
-                        <ArrowRight className="w-4 h-4 ml-2" />
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {/* Blocked State Message */}
-                  {isValidationBlocked && (
-                    <div className="flex justify-center pt-4">
-                      <p className="text-neutral-500 text-sm">
-                        Please fix the validation errors above to proceed
+                    <div className="p-4 rounded-lg bg-neutral-800">
+                      <p className="text-neutral-400 text-sm">Size</p>
+                      <p className="text-2xl font-bold text-white">
+                        {localProfile.sizeMb > 1 ? `${localProfile.sizeMb.toFixed(1)} MB` : `${(localProfile.sizeMb * 1024).toFixed(1)} KB`}
                       </p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                    <div className="p-4 rounded-lg bg-neutral-800 col-span-2">
+                      <p className="text-neutral-400 text-sm">Inferred Task</p>
+                      <p className="text-2xl font-bold text-brand-400">{localProfile.inferredTask}</p>
+                    </div>
+                    {localProfile.labelColumn && (
+                      <div className="p-4 rounded-lg bg-neutral-800 col-span-2">
+                        <p className="text-neutral-400 text-sm">Label Column</p>
+                        <p className="text-xl font-bold text-white">{localProfile.labelColumn}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={handleProceed}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    size="lg"
+                  >
+                    Proceed to Design
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </DashboardLayout>

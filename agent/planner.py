@@ -4,7 +4,6 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from dataclasses import dataclass, field
 from typing import Optional, Literal
-import numpy as np
 import uuid
 from datetime import datetime
 

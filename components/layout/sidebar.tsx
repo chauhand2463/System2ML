@@ -24,6 +24,8 @@ import {
   Database,
   FileSpreadsheet,
   Lock,
+  Shield,
+  ShieldCheck,
   Cpu,
   Check,
   X,
@@ -33,9 +35,9 @@ import { useWorkflow, LifecycleState } from '@/hooks/use-workflow'
 
 const WIZARD_STEPS = [
   { id: 'DATASET_UPLOADED', label: 'Dataset', href: '/datasets/new', icon: Database },
-  { id: 'DATASET_PROFILED', label: 'Profile', href: '/datasets/profile', icon: FileSpreadsheet },
-  { id: 'DATASET_VALIDATED', label: 'Validate', href: '/datasets/validate', icon: Lock },
-  { id: 'CONSTRAINTS_VALIDATED', label: 'Constraints', href: '/design/constraints', icon: Zap },
+  { id: 'DATASET_PROFILED', label: 'Profiling', href: '/design/input', icon: FileSpreadsheet },
+  { id: 'DATASET_VALIDATED', label: 'Validate', href: '/design/constraints', icon: ShieldCheck },
+  { id: 'CONSTRAINTS_VALIDATED', label: 'Optimization', href: '/design/review', icon: Zap },
   { id: 'CANDIDATES_GENERATED', label: 'Results', href: '/design/results', icon: Lightbulb },
   { id: 'EXECUTION_APPROVED', label: 'Confirm', href: '/train/confirm', icon: CheckCircle2 },
   { id: 'TRAINING_RUNNING', label: 'Training', href: '/train/running', icon: Cpu },
@@ -86,7 +88,13 @@ function SidebarComponent() {
   }
 
   const isStepAccessible = (index: number) => {
-    return index <= currentStep || (projectState?.is_blocked && index < currentStep)
+    // Current step and all previous steps are accessible
+    if (index <= currentStep) return true
+
+    // If not blocked, allow some forward looking (optional, but let's keep it strict for now to avoid errors)
+    // return !projectState?.is_blocked
+
+    return false
   }
 
   return (
@@ -165,9 +173,9 @@ function SidebarComponent() {
                     status === 'blocked' && 'bg-red-500/20 text-red-400',
                     status === 'pending' && 'bg-neutral-800 text-neutral-500'
                   )}>
-                    {status === 'completed' ? <Check className="w-3 h-3" /> : 
-                     status === 'blocked' ? <X className="w-3 h-3" /> :
-                     index + 1}
+                    {status === 'completed' ? <Check className="w-3 h-3" /> :
+                      status === 'blocked' ? <X className="w-3 h-3" /> :
+                        index + 1}
                   </div>
                   <Icon className="w-3.5 h-3.5" />
                   <span className="flex-1 font-medium">{step.label}</span>
@@ -177,7 +185,7 @@ function SidebarComponent() {
                 </Link>
               )
             })}
-            
+
             {/* Progress Bar */}
             <div className="mt-3 px-1">
               <div className="flex justify-between text-[10px] text-neutral-500 mb-1">
@@ -185,7 +193,7 @@ function SidebarComponent() {
                 <span>{Math.round((currentStep / (WIZARD_STEPS.length - 1)) * 100)}%</span>
               </div>
               <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full transition-all duration-500"
                   style={{ width: `${(currentStep / (WIZARD_STEPS.length - 1)) * 100}%` }}
                 />
@@ -231,8 +239,8 @@ function SidebarComponent() {
                 )}
                 <div className={cn(
                   "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300",
-                  isActive 
-                    ? 'bg-brand-500/20 text-brand-400' 
+                  isActive
+                    ? 'bg-brand-500/20 text-brand-400'
                     : 'bg-white/5 text-neutral-500 group-hover:bg-white/10 group-hover:text-white'
                 )}>
                   <Icon className="w-4 h-4" />
@@ -268,8 +276,8 @@ function SidebarComponent() {
                   )}
                   <div className={cn(
                     "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300",
-                    isActive 
-                      ? 'bg-brand-500/20 text-brand-400' 
+                    isActive
+                      ? 'bg-brand-500/20 text-brand-400'
                       : 'bg-white/5 text-neutral-500 group-hover:bg-white/10 group-hover:text-white'
                   )}>
                     <Icon className="w-4 h-4" />
@@ -302,7 +310,7 @@ function SidebarComponent() {
               <p className="text-xs text-neutral-500 truncate">{user?.email || 'Not signed in'}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleLogout}
             className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-neutral-400 hover:bg-white/5 hover:text-white transition-all duration-300 group"
           >

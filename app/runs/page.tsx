@@ -36,13 +36,13 @@ export default function RunsPage() {
 
   const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'completed': 
+      case 'completed':
         return { icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }
-      case 'failed': 
+      case 'failed':
         return { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' }
-      case 'running': 
+      case 'running':
         return { icon: Clock, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' }
-      default: 
+      default:
         return { icon: Clock, color: 'text-neutral-400', bg: 'bg-neutral-500/10', border: 'border-neutral-500/20' }
     }
   }
@@ -73,7 +73,7 @@ export default function RunsPage() {
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {stats.map((stat, i) => (
-            <div 
+            <div
               key={i}
               onClick={() => setFilter(stat.label.toLowerCase() === 'total' ? 'all' : stat.label.toLowerCase())}
               className={`cursor-pointer relative overflow-hidden rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-5 hover:border-brand-500/30 transition-all duration-500 ${filter === (stat.label.toLowerCase() === 'total' ? 'all' : stat.label.toLowerCase()) ? 'border-brand-500/30' : ''}`}
@@ -93,11 +93,10 @@ export default function RunsPage() {
             <button
               key={status}
               onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${
-                filter === status 
-                  ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30' 
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 ${filter === status
+                  ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30'
                   : 'bg-neutral-900/50 text-neutral-400 border border-white/5 hover:border-white/10'
-              }`}
+                }`}
             >
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </button>
@@ -128,12 +127,12 @@ export default function RunsPage() {
               const statusConfig = getStatusConfig(run.status)
               const StatusIcon = statusConfig.icon
               return (
-                <div 
-                  key={run.id} 
+                <div
+                  key={run.id}
                   className="group relative overflow-hidden rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6 hover:border-brand-500/30 transition-all duration-300"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-brand-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  
+
                   <div className="relative flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-xl ${statusConfig.bg} flex items-center justify-center border ${statusConfig.border}`}>
@@ -147,14 +146,17 @@ export default function RunsPage() {
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-4">
-                      {run.metrics && (
-                        <div className="text-right">
-                          <p className="text-white font-medium">{(run.metrics.accuracy * 100).toFixed(1)}%</p>
-                          <p className="text-neutral-500 text-xs">accuracy</p>
-                        </div>
-                      )}
+                      {run.metrics && (() => {
+                        const m = typeof run.metrics === 'string' ? JSON.parse(run.metrics) : run.metrics
+                        return m?.accuracy ? (
+                          <div className="text-right">
+                            <p className="text-white font-medium">{(m.accuracy * 100).toFixed(1)}%</p>
+                            <p className="text-neutral-500 text-xs">accuracy</p>
+                          </div>
+                        ) : null
+                      })()}
                       <span className={`px-4 py-1.5 rounded-full text-xs font-semibold ${statusConfig.bg} ${statusConfig.color} border ${statusConfig.border}`}>
                         {run.status}
                       </span>
@@ -165,7 +167,7 @@ export default function RunsPage() {
                       </Link>
                     </div>
                   </div>
-                  
+
                   {run.started_at && (
                     <div className="mt-4 pt-4 border-t border-white/5 flex gap-6 text-sm text-neutral-500">
                       <span className="flex items-center gap-2">

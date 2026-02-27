@@ -4,25 +4,29 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign } from '@/hooks/use-design'
-import { validateConstraints, getFeasibilityPolicy } from '@/lib/api'
+import { useWorkflow } from '@/hooks/use-workflow'
+import { validateConstraints, getFeasibilityPolicy, TrainingPlanRequest, DesignRequest } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { 
+import {
   Database, BarChart3, ArrowRight, ArrowLeft, AlertTriangle, Shield,
-  HardDrive, Tag, Clock, CheckCircle, XCircle, Loader2
+  HardDrive, Tag, Clock, CheckCircle, XCircle, Loader2, Sparkles
 } from 'lucide-react'
+import { AIAssistant } from '@/components/design/ai-assistant'
+import { AISuggestion } from '@/lib/api'
 
 export default function DesignConstraintsPage() {
   const router = useRouter()
   const { dataset, constraints, setConstraints, setDesignStep, canProceedToDesign } = useDesign()
-  
+  const { projectId } = useWorkflow()
+
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<any>(null)
   const [feasibilityPolicy, setFeasibilityPolicy] = useState<any>(null)
-  
+
   const [formData, setFormData] = useState({
     maxCostUsd: constraints.maxCostUsd,
     maxCarbonKg: constraints.maxCarbonKg,
@@ -44,26 +48,27 @@ export default function DesignConstraintsPage() {
     setValidating(true)
     setValidationResult(null)
     setFeasibilityPolicy(null)
-    
+
     try {
       // Update constraints in state
       setConstraints(formData)
-      
-      const request = {
+
+      const request: Partial<DesignRequest> = {
+        project_id: projectId,
         data_profile: { type: dataset.type },
-        objective: constraints.objective,
+        objective: constraints.objective as any,
         constraints: {
           max_cost_usd: formData.maxCostUsd,
           max_carbon_kg: formData.maxCarbonKg,
           max_latency_ms: formData.maxLatencyMs,
-          compliance_level: formData.complianceLevel,
+          compliance_level: formData.complianceLevel as any,
         },
-        deployment: 'batch',
+        deployment: 'batch' as const,
       }
-      
+
       const validation = await validateConstraints(request)
       setValidationResult(validation)
-      
+
       if (validation.is_valid) {
         const policy = await getFeasibilityPolicy(request)
         setFeasibilityPolicy(policy)
@@ -122,6 +127,19 @@ export default function DesignConstraintsPage() {
             </CardContent>
           </Card>
 
+          {/* AI Advisor - GUIDANCE */}
+          <div className="mb-6">
+            <AIAssistant
+              projectId={projectId}
+              onApply={(suggestion) => {
+                setFormData(prev => ({
+                  ...prev,
+                  [suggestion.field]: suggestion.value
+                }))
+              }}
+            />
+          </div>
+
           {/* Constraints Form */}
           <Card className="bg-neutral-900/50 border-white/5">
             <CardHeader>
@@ -140,34 +158,43 @@ export default function DesignConstraintsPage() {
                       type="number"
                       step="0.1"
                       min="0.1"
-                      value={formData.maxCostUsd}
-                      onChange={(e) => setFormData({ ...formData, maxCostUsd: parseFloat(e.target.value) })}
+                      value={isNaN(formData.maxCostUsd) ? '' : formData.maxCostUsd}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value)
+                        setFormData({ ...formData, maxCostUsd: isNaN(val) ? 0 : val })
+                      }}
                       className="pl-7 bg-neutral-800/50 border-white/10 text-white"
                     />
                   </div>
                   <p className="text-xs text-neutral-500">Training budget</p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label className="text-neutral-400">Max Carbon (kg)</Label>
                   <Input
                     type="number"
                     step="0.01"
                     min="0.01"
-                    value={formData.maxCarbonKg}
-                    onChange={(e) => setFormData({ ...formData, maxCarbonKg: parseFloat(e.target.value) })}
+                    value={isNaN(formData.maxCarbonKg) ? '' : formData.maxCarbonKg}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value)
+                      setFormData({ ...formData, maxCarbonKg: isNaN(val) ? 0 : val })
+                    }}
                     className="bg-neutral-800/50 border-white/10 text-white"
                   />
                   <p className="text-xs text-neutral-500">Carbon emissions</p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label className="text-neutral-400">Max Latency (ms)</Label>
                   <Input
                     type="number"
                     min="1"
-                    value={formData.maxLatencyMs}
-                    onChange={(e) => setFormData({ ...formData, maxLatencyMs: parseInt(e.target.value) })}
+                    value={isNaN(formData.maxLatencyMs) ? '' : formData.maxLatencyMs}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value)
+                      setFormData({ ...formData, maxLatencyMs: isNaN(val) ? 0 : val })
+                    }}
                     className="bg-neutral-800/50 border-white/10 text-white"
                   />
                   <p className="text-xs text-neutral-500">Inference latency</p>
@@ -210,24 +237,22 @@ export default function DesignConstraintsPage() {
 
               {/* Validation Results */}
               {validationResult && (
-                <div className={`rounded-xl p-4 ${
-                  validationResult.is_valid 
-                    ? 'bg-emerald-500/10 border border-emerald-500/20' 
-                    : 'bg-red-500/10 border border-red-500/20'
-                }`}>
+                <div className={`rounded-xl p-4 ${validationResult.is_valid
+                  ? 'bg-emerald-500/10 border border-emerald-500/20'
+                  : 'bg-red-500/10 border border-red-500/20'
+                  }`}>
                   <div className="flex items-center gap-2 mb-3">
                     {validationResult.is_valid ? (
                       <CheckCircle className="w-5 h-5 text-emerald-400" />
                     ) : (
                       <XCircle className="w-5 h-5 text-red-400" />
                     )}
-                    <span className={`font-medium ${
-                      validationResult.is_valid ? 'text-emerald-400' : 'text-red-400'
-                    }`}>
+                    <span className={`font-medium ${validationResult.is_valid ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
                       {validationResult.is_valid ? 'Constraints Valid' : 'Constraint Violations'}
                     </span>
                   </div>
-                  
+
                   {/* Violations */}
                   {validationResult.violations?.length > 0 && (
                     <div className="space-y-2 mb-3">
@@ -239,7 +264,7 @@ export default function DesignConstraintsPage() {
                       ))}
                     </div>
                   )}
-                  
+
                   {/* Suggestions */}
                   {validationResult.suggestions?.length > 0 && (
                     <div className="pt-3 border-t border-neutral-700">

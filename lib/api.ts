@@ -27,6 +27,7 @@ function isApiConfigured(): boolean {
 }
 
 export interface DesignRequest {
+  project_id?: string | null;
   data_profile: {
     type: 'tabular' | 'text' | 'image' | 'time-series';
     size_mb?: number;
@@ -38,7 +39,7 @@ export interface DesignRequest {
     max_cost_usd: number;
     max_carbon_kg: number;
     max_latency_ms: number;
-    compliance_level: 'low' | 'regulated' | 'high';
+    compliance_level: 'none' | 'standard' | 'regulated' | 'highly_regulated';
   };
   deployment: 'batch' | 'realtime' | 'edge';
   retraining: 'time' | 'drift' | 'none';
@@ -117,10 +118,21 @@ export async function executePipeline(pipelineId: string) {
   }
 }
 
+export async function fetchRunById(runId: string) {
+  if (!isApiConfigured()) return null;
+  try {
+    const response = await fetch(`${API_ENDPOINTS.RUNS}/${runId}`);
+    const data = await response.json();
+    return data.run || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchPipelineRuns(pipelineId?: string) {
   if (!isApiConfigured()) return [];
   try {
-    const url = pipelineId 
+    const url = pipelineId
       ? `${API_ENDPOINTS.RUNS}?pipeline_id=${pipelineId}`
       : API_ENDPOINTS.RUNS;
     const response = await fetch(url);
@@ -204,12 +216,13 @@ export interface ValidationResult {
     reason: string;
     priority: number;
   }>;
-  feasibility_score: number;
+  compliance_level: 'none' | 'standard' | 'regulated' | 'highly_regulated';
+  feasibility_score?: number;
 }
 
 export async function validateConstraints(request: Partial<DesignRequest>): Promise<ValidationResult> {
   if (!isApiConfigured()) {
-    return { is_valid: true, violations: [], suggestions: [], feasibility_score: 1 };
+    return { is_valid: true, violations: [], suggestions: [], feasibility_score: 1, compliance_level: 'none' };
   }
   try {
     const response = await fetch(API_ENDPOINTS.VALIDATE, {
@@ -219,7 +232,7 @@ export async function validateConstraints(request: Partial<DesignRequest>): Prom
     });
     return response.json();
   } catch {
-    return { is_valid: true, violations: [], suggestions: [], feasibility_score: 1 };
+    return { is_valid: true, violations: [], suggestions: [], feasibility_score: 1, compliance_level: 'none' };
   }
 }
 
@@ -233,12 +246,12 @@ export interface FeasibilityPolicy {
 
 export async function getFeasibilityPolicy(request: Partial<DesignRequest>): Promise<FeasibilityPolicy> {
   if (!isApiConfigured()) {
-    return { 
-      request_id: 'mock-id', 
-      eligible_model_families: ['classical', 'compressed', 'small_deep', 'transformer'], 
-      hard_constraints: ['max_cost_usd', 'max_carbon_kg'], 
-      soft_constraints: ['max_latency_ms'], 
-      required_monitors: ['cost', 'carbon', 'latency'] 
+    return {
+      request_id: 'mock-id',
+      eligible_model_families: ['classical', 'compressed', 'small_deep', 'transformer'],
+      hard_constraints: ['max_cost_usd', 'max_carbon_kg'],
+      soft_constraints: ['max_latency_ms'],
+      required_monitors: ['cost', 'carbon', 'latency']
     };
   }
   try {
@@ -249,12 +262,12 @@ export async function getFeasibilityPolicy(request: Partial<DesignRequest>): Pro
     });
     return response.json();
   } catch {
-    return { 
-      request_id: '', 
-      eligible_model_families: ['classical'], 
-      hard_constraints: [], 
-      soft_constraints: [], 
-      required_monitors: [] 
+    return {
+      request_id: '',
+      eligible_model_families: ['classical'],
+      hard_constraints: [],
+      soft_constraints: [],
+      required_monitors: []
     };
   }
 }
@@ -283,20 +296,20 @@ export async function generateCandidates(request: Partial<DesignRequest>): Promi
     const maxCost = request?.constraints?.max_cost_usd || 10;
     const maxCarbon = request?.constraints?.max_carbon_kg || 1.0;
     const maxLatency = request?.constraints?.max_latency_ms || 200;
-    
+
     const mockCandidates = [
       { family: "Classical", cost: 0.5, carbon: 0.01, latency: 100, accuracy: 0.82 },
       { family: "Compressed", cost: 0.8, carbon: 0.03, latency: 200, accuracy: 0.85 },
       { family: "Small Deep", cost: 2.0, carbon: 0.1, latency: 150, accuracy: 0.88 },
       { family: "Transformer", cost: 5.0, carbon: 0.3, latency: 180, accuracy: 0.92 },
     ];
-    
+
     const candidates = mockCandidates.map((m, i) => {
       const violates = [];
       if (m.cost > maxCost) violates.push({ constraint: "max_cost_usd", message: `$${m.cost} exceeds $${maxCost}` });
       if (m.carbon > maxCarbon) violates.push({ constraint: "max_carbon_kg", message: `${m.carbon}kg exceeds ${maxCarbon}kg` });
       if (m.latency > maxLatency) violates.push({ constraint: "max_latency_ms", message: `${m.latency}ms exceeds ${maxLatency}ms` });
-      
+
       return {
         id: `mock-${i}`,
         name: `${m.family} ML Pipeline`,
@@ -309,7 +322,7 @@ export async function generateCandidates(request: Partial<DesignRequest>): Promi
         violates_constraints: violates,
       };
     });
-    
+
     const feasibleCount = candidates.filter(c => !c.violates_constraints.length).length;
     return { candidates, feasible_count: feasibleCount, total_count: candidates.length };
   }
@@ -334,6 +347,7 @@ export interface SafetyValidation {
 export async function validateExecution(
   pipeline: { estimated_cost: number; estimated_carbon: number; estimated_latency_ms: number },
   constraints: { max_cost_usd: number; max_carbon_kg: number; max_latency_ms: number },
+  projectId?: string | null,
   force?: boolean
 ): Promise<SafetyValidation> {
   if (!isApiConfigured()) {
@@ -343,7 +357,7 @@ export async function validateExecution(
     const response = await fetch(API_ENDPOINTS.SAFETY_VALIDATE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pipeline, constraints, force: force || false }),
+      body: JSON.stringify({ project_id: projectId, pipeline, constraints, force: force || false }),
     });
     return response.json();
   } catch {
@@ -440,20 +454,20 @@ export async function uploadDataset(file: File): Promise<{
   if (!isApiConfigured()) {
     throw new Error('API not configured. Please set NEXT_PUBLIC_API_URL');
   }
-  
+
   const formData = new FormData();
   formData.append('file', file);
-  
+
   const response = await fetch(`${API_BASE}/api/datasets/upload`, {
     method: 'POST',
     body: formData,
   });
-  
+
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Upload failed: ${response.status} - ${text}`);
   }
-  
+
   return response.json();
 }
 
@@ -465,23 +479,23 @@ export async function profileDataset(request: DatasetProfileRequest): Promise<{ 
     const url = `${API_BASE}/api/datasets/profile`;
     console.log('Calling profile API:', url);
     console.log('Request body:', JSON.stringify(request));
-    
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     });
-    
+
     console.log('Profile response status:', response.status);
     console.log('Profile response statusText:', response.statusText);
-    
+
     const text = await response.text();
     console.log('Profile response text:', text);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${text || 'Profile failed'}`);
     }
-    
+
     const data = JSON.parse(text);
     // Ensure we return the dataset in the expected format
     return { dataset: data.dataset || data.profile || data };
@@ -522,6 +536,34 @@ export async function validateDataset(params: {
     console.error('Validate dataset error:', error);
     return { status: 'valid', errors: [] };
   }
+}
+
+export async function anonymizePII(fileName: string, piiFields: string[]): Promise<{
+  status: string;
+  original_file: string;
+  anonymized_file: string;
+  anonymized_columns: string[];
+  message: string;
+}> {
+  if (!isApiConfigured()) {
+    throw new Error('API not configured. Please set NEXT_PUBLIC_API_URL');
+  }
+
+  const response = await fetch(`${API_BASE}/api/datasets/anonymize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      file_name: fileName,
+      pii_fields: piiFields,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Anonymize failed: ${response.status} - ${text}`);
+  }
+
+  return response.json();
 }
 
 export async function fetchDatasets(): Promise<{ datasets: DatasetProfile[] }> {
@@ -658,7 +700,18 @@ export interface TrainingPlanResponse {
   current_state?: string;
 }
 
-export async function createTrainingPlan(request: TrainingPlanRequest): Promise<TrainingPlanResponse> {
+export async function createTrainingPlan(params: {
+  project_id: string;
+  pipeline_id: string;
+  model_type: string;
+  dataset_rows: number;
+  estimated_epochs: number;
+}): Promise<TrainingPlanResponse> {
+  const { project_id, pipeline_id, model_type, dataset_rows, estimated_epochs } = params;
+
+  if (!project_id) {
+    throw new Error('project_id is required to create a training plan');
+  }
   if (!isApiConfigured()) {
     // Return mock data for demo
     return {
@@ -668,8 +721,8 @@ export async function createTrainingPlan(request: TrainingPlanRequest): Promise<
         estimated_carbon_kg: 0.82,
         estimated_time_ms: 45000,
         peak_memory_mb: 512,
-        model_type: request.model_type || 'random_forest',
-        dataset_rows: request.dataset_rows || 10000,
+        model_type: model_type || 'random_forest',
+        dataset_rows: dataset_rows || 10000,
       },
       violations: [],
     };
@@ -678,16 +731,46 @@ export async function createTrainingPlan(request: TrainingPlanRequest): Promise<
     const response = await fetch(`${API_BASE}/api/training/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        project_id,
+        pipeline_id,
+        model_type,
+        dataset_rows,
+        estimated_epochs,
+      }),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('Training plan error:', data);
-      throw new Error(data.detail || 'Training plan failed');
+
+    let data: any = null;
+    const responseText = await response.clone().text();
+
+    try {
+      data = await response.json();
+    } catch {
+      // Empty or non-JSON body - handled below
     }
+
+    if (!response.ok) {
+      let message = response.statusText || `Training plan failed (${response.status})`;
+
+      try {
+        const data = JSON.parse(responseText);
+        if (Array.isArray(data?.detail) && data.detail[0]?.msg) {
+          const field = data.detail[0]?.loc?.slice(-1)?.[0];
+          message = field ? `${field}: ${data.detail[0].msg}` : data.detail[0].msg;
+        } else if (typeof data?.detail === 'string') {
+          message = data.detail;
+        }
+      } catch { }
+
+      console.error('Status:', response.status, 'Raw body:', responseText);
+      throw new Error(message);
+    }
+
     return data;
   } catch (error: any) {
-    console.error('Training plan error:', error);
+    if (error.name === 'SyntaxError') {
+      console.error('Failed to parse response JSON');
+    }
     throw error;
   }
 }
@@ -757,5 +840,25 @@ export async function stopTrainingProject(projectId: string): Promise<{ status: 
   } catch (error: any) {
     console.error('Stop training error:', error);
     throw error;
+  }
+}
+export interface AISuggestion {
+  field: string;
+  value: any;
+  reason: string;
+}
+
+export async function getAISuggestions(projectId: string): Promise<{ suggestions: AISuggestion[] }> {
+  try {
+    const response = await fetch(`${API_BASE}/api/ai/suggest/${projectId}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    if (!response.ok) throw new Error('Failed to fetch AI suggestions');
+    return response.json();
+  } catch (error) {
+    console.error('AI Suggestion Error:', error);
+    return { suggestions: [] };
   }
 }

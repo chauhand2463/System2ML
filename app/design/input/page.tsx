@@ -7,7 +7,7 @@ import { useDesign } from '@/hooks/use-design'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
+import {
   Database, BarChart3, ArrowRight, AlertTriangle, Shield,
   HardDrive, Tag, Clock
 } from 'lucide-react'
@@ -63,7 +63,9 @@ export default function DesignInputPage() {
                     <HardDrive className="w-3 h-3" />
                     <span className="text-xs">Size</span>
                   </div>
-                  <p className="text-lg font-semibold text-white">{dataset.sizeMb.toFixed(1)} MB</p>
+                  <p className="text-lg font-semibold text-white">
+                    {dataset.sizeMb > 1 ? `${dataset.sizeMb.toFixed(1)} MB` : `${(dataset.sizeMb * 1024).toFixed(1)} KB`}
+                  </p>
                 </div>
                 <div className="p-3 rounded-lg bg-neutral-800/50">
                   <div className="flex items-center gap-2 text-neutral-400 mb-1">
@@ -87,7 +89,7 @@ export default function DesignInputPage() {
                   <p className="text-lg font-semibold text-white">{dataset.missingValues}%</p>
                 </div>
               </div>
-              
+
               <div className="flex gap-2 mt-4">
                 <Badge className="bg-brand-500/20 text-brand-400">{dataset.type}</Badge>
                 <Badge className="bg-purple-500/20 text-purple-400">{dataset.inferredTask}</Badge>

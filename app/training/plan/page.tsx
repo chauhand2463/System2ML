@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign } from '@/hooks/use-design'
+import { useWorkflow } from '@/hooks/use-workflow'
 import { createTrainingPlan, TrainingPlanResponse } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { 
-  Database, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, 
+import {
+  Database, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle,
   Shield, Zap, DollarSign, Leaf, Clock, Play, Loader2, Target,
   HardDrive, Gauge, Wifi
 } from 'lucide-react'
@@ -18,7 +19,8 @@ import {
 export default function TrainingPlanPage() {
   const router = useRouter()
   const { dataset, constraints, selectedPipeline, setDesignStep } = useDesign()
-  
+  const { projectId } = useWorkflow()
+
   const [loading, setLoading] = useState(true)
   const [plan, setPlan] = useState<TrainingPlanResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -29,19 +31,26 @@ export default function TrainingPlanPage() {
       router.push('/design/results')
       return
     }
-    
+
     const fetchPlan = async () => {
       setLoading(true)
       setError(null)
-      
+
+      if (!projectId) {
+        setError('Select a project before creating a training plan.');
+        setLoading(false);
+        return;
+      }
+
       try {
         const result = await createTrainingPlan({
+          project_id: projectId,
           pipeline_id: selectedPipeline.id,
           model_type: selectedPipeline.modelFamily,
           dataset_rows: dataset?.rows || 10000,
           estimated_epochs: 100,
         })
-        
+
         setPlan(result)
       } catch (err: any) {
         console.error('Plan error:', err)
@@ -50,18 +59,18 @@ export default function TrainingPlanPage() {
         setLoading(false)
       }
     }
-    
+
     fetchPlan()
   }, [selectedPipeline, dataset, router])
 
   const handleStartTraining = () => {
     if (plan?.status !== 'approved') return
-    
+
     setStarting(true)
     // Save plan to localStorage for the running page
     localStorage.setItem('system2ml_training_plan', JSON.stringify(plan))
     localStorage.setItem('system2ml_selected_pipeline', JSON.stringify(selectedPipeline))
-    
+
     // Navigate to running page
     router.push('/train/running')
   }
@@ -92,8 +101,8 @@ export default function TrainingPlanPage() {
                 <AlertTriangle className="w-6 h-6" />
                 <p className="font-medium">{error}</p>
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="mt-4"
                 onClick={() => router.push('/design/results')}
               >
@@ -298,7 +307,7 @@ export default function TrainingPlanPage() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Pipeline Selection
             </Button>
-            
+
             {isApproved ? (
               <Button
                 onClick={handleStartTraining}
