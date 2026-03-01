@@ -862,3 +862,208 @@ export async function getAISuggestions(projectId: string): Promise<{ suggestions
     return { suggestions: [] };
   }
 }
+
+// ============================================
+// GROQ LLM PIPELINE DESIGN API
+// ============================================
+
+export interface GroqDesignRequest {
+  dataset_profile: {
+    type: string;
+    rows: number;
+    columns: number;
+    has_labels: boolean;
+    label_type: string;
+    pii_detected: boolean;
+    pii_fields: string[];
+    missing_percentage?: number;
+    project_id?: string;
+  };
+  constraints: {
+    max_cost_usd: number;
+    max_carbon_kg: number;
+    max_latency_ms: number;
+    compliance_level?: string;
+    deployment?: string;
+    objective_priority?: string[];
+  };
+  infra_context?: {
+    gpu_available: boolean;
+    cloud_provider: string;
+    region: string;
+  };
+}
+
+export interface PipelineDSL {
+  status: 'success' | 'failure';
+  decision_summary: {
+    task_type: string;
+    recommended_model_family: string;
+    rationale: string[];
+  };
+  pipeline: {
+    data_ingestion: {
+      source_type: string;
+      pii_handling: string;
+      schema_validation: boolean;
+    };
+    feature_engineering: {
+      steps: string[];
+      feature_store: boolean;
+    };
+    model_training: {
+      algorithm: string;
+      hyperparam_strategy: string;
+      resource_class: string;
+    };
+    evaluation: {
+      metrics: string[];
+      cross_validation: boolean;
+    };
+    deployment: {
+      mode: string;
+      format: string;
+      latency_budget_ms: number;
+    };
+    monitoring: {
+      drift: string[];
+      data_quality: string[];
+      performance: string[];
+      pii_leak_detection: boolean;
+    };
+    retraining_policy: {
+      trigger: string[];
+      schedule_days: number;
+    };
+    rollback: {
+      strategy: string;
+      max_rollback_minutes: number;
+    };
+    governance: {
+      approval_required: boolean;
+      audit_log: boolean;
+      model_card: boolean;
+    };
+  };
+  cost_estimate: {
+    monthly_usd: number;
+    confidence: number;
+  };
+  carbon_estimate: {
+    monthly_kg: number;
+    confidence: number;
+  };
+  risk_register: Array<{
+    risk: string;
+    severity: string;
+    mitigation: string;
+  }>;
+  alternatives_considered: Array<{
+    model_family: string;
+    rejected_reason: string;
+  }>;
+}
+
+export interface CritiqueResult {
+  issues: Array<{
+    category: string;
+    issue: string;
+    severity: string;
+    fix: string;
+    field_path: string;
+  }>;
+  fixes_applied: Array<{
+    field: string;
+    issue: string;
+    fix: string;
+  }>;
+  merged: boolean;
+}
+
+export interface ExplainResponse {
+  summary: string;
+  key_tradeoffs: Array<{
+    choice: string;
+    reason: string;
+    impact: string;
+  }>;
+  risk_warnings: Array<{
+    risk: string;
+    impact: string;
+    mitigation: string;
+  }>;
+  deployment_readiness: {
+    status: string;
+    blockers: string[];
+    next_steps: string[];
+  };
+  ui_blocks: {
+    pipeline_graph: boolean;
+    cost_meter: boolean;
+    carbon_meter: boolean;
+    risk_panel: boolean;
+    approval_panel: boolean;
+  };
+}
+
+export interface GroqDesignResponse {
+  status: 'success' | 'failure';
+  pipeline: PipelineDSL;
+  explanation: ExplainResponse;
+  critique: CritiqueResult;
+  audit_log: Array<{
+    step: string;
+    timestamp: number;
+    status: string;
+    errors?: string[];
+    issues_found?: number;
+    fixes_applied?: number;
+    total_elapsed_seconds?: number;
+  }>;
+  elapsed_seconds: number;
+  validation_errors?: string[];
+}
+
+export async function designWithGroq(request: GroqDesignRequest): Promise<GroqDesignResponse> {
+  const response = await fetch('/api/groq/design', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    const msg = error.error || error.detail || 'Groq design request failed';
+
+    // Surface human-readable messages for common issues
+    if (response.status === 401) {
+      throw new Error('❌ Invalid Groq API Key — go to console.groq.com → API Keys to create or renew your key, then update .env.local');
+    }
+    if (response.status === 429) {
+      throw new Error('⏳ Rate limit reached — wait a few seconds and try again');
+    }
+    throw new Error(msg);
+  }
+
+  return response.json();
+}
+
+export async function explainPipeline(pipelineDSL: PipelineDSL, audience: string = 'product_manager'): Promise<ExplainResponse> {
+  const response = await fetch('/api/groq/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pipeline_dsl: pipelineDSL,
+      audience,
+      explain_level: 'executive',
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || error.detail || 'Explain request failed');
+  }
+
+  return response.json();
+}
+

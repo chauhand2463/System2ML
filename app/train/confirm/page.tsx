@@ -9,18 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { 
-  Database, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle, 
+import {
+  Database, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle,
   Shield, Zap, DollarSign, Leaf, Clock, Play, Loader2, Target
 } from 'lucide-react'
 
 export default function TrainConfirmPage() {
   const router = useRouter()
-  const { 
+  const {
     dataset, constraints, selectedPipeline, trainingRun, setTrainingRun,
-    setDesignStep, canProceedToTraining 
+    setDesignStep, canProceedToTraining
   } = useDesign()
-  
+
   const [validating, setValidating] = useState(false)
   const [preTrainingCheck, setPreTrainingCheck] = useState<{
     costPass: boolean
@@ -41,21 +41,21 @@ export default function TrainConfirmPage() {
     // Run pre-training check
     const runPreTrainingCheck = async () => {
       if (!selectedPipeline) return
-      
+
       setValidating(true)
-      
+
       // Local validation
       const costPass = selectedPipeline.estimatedCost <= constraints.maxCostUsd
       const carbonPass = selectedPipeline.estimatedCarbon <= constraints.maxCarbonKg
       const latencyPass = selectedPipeline.estimatedLatencyMs <= constraints.maxLatencyMs
-      
+
       setPreTrainingCheck({
         costPass,
         carbonPass,
         latencyPass,
         allPass: costPass && carbonPass && latencyPass,
       })
-      
+
       // Also validate with backend
       try {
         await validateExecution(
@@ -73,10 +73,10 @@ export default function TrainConfirmPage() {
       } catch (e) {
         console.error('Validation error:', e)
       }
-      
+
       setValidating(false)
     }
-    
+
     if (selectedPipeline) {
       runPreTrainingCheck()
     }
@@ -102,7 +102,7 @@ export default function TrainConfirmPage() {
 
   const handleStartTraining = async () => {
     setStarting(true)
-    
+
     try {
       const result = await startTraining({
         pipeline_id: selectedPipeline.id,
@@ -117,7 +117,7 @@ export default function TrainConfirmPage() {
         estimated_carbon: selectedPipeline.estimatedCarbon,
         estimated_time_seconds: estimatedTime,
       })
-      
+
       const run: TrainingRun = {
         id: result.run_id,
         pipelineId: selectedPipeline.id,
@@ -130,10 +130,10 @@ export default function TrainConfirmPage() {
         elapsedTime: 0,
         estimatedTotalTime: estimatedTime,
       }
-      
+
       setTrainingRun(run)
       setStarted(true)
-      
+
       // Navigate to running page
       setDesignStep('running')
       router.push('/train/running')
@@ -254,11 +254,10 @@ export default function TrainConfirmPage() {
                         </Badge>
                       )}
                     </div>
-                    <Progress 
-                      value={(selectedPipeline.estimatedCost / constraints.maxCostUsd) * 100} 
-                      className={`h-2 ${
-                        preTrainingCheck.costPass ? '' : 'bg-red-500'
-                      }`}
+                    <Progress
+                      value={(selectedPipeline.estimatedCost / constraints.maxCostUsd) * 100}
+                      className={`h-2 ${preTrainingCheck.costPass ? '' : 'bg-red-500'
+                        }`}
                     />
                     <p className="text-sm text-neutral-500">
                       ${selectedPipeline.estimatedCost} of ${constraints.maxCostUsd} budget
@@ -284,11 +283,10 @@ export default function TrainConfirmPage() {
                         </Badge>
                       )}
                     </div>
-                    <Progress 
-                      value={(selectedPipeline.estimatedCarbon / constraints.maxCarbonKg) * 100} 
-                      className={`h-2 ${
-                        preTrainingCheck.carbonPass ? '' : 'bg-red-500'
-                      }`}
+                    <Progress
+                      value={(selectedPipeline.estimatedCarbon / constraints.maxCarbonKg) * 100}
+                      className={`h-2 ${preTrainingCheck.carbonPass ? '' : 'bg-red-500'
+                        }`}
                     />
                     <p className="text-sm text-neutral-500">
                       {selectedPipeline.estimatedCarbon}kg of {constraints.maxCarbonKg}kg limit
@@ -314,11 +312,10 @@ export default function TrainConfirmPage() {
                         </Badge>
                       )}
                     </div>
-                    <Progress 
-                      value={(selectedPipeline.estimatedLatencyMs / constraints.maxLatencyMs) * 100} 
-                      className={`h-2 ${
-                        preTrainingCheck.latencyPass ? '' : 'bg-red-500'
-                      }`}
+                    <Progress
+                      value={(selectedPipeline.estimatedLatencyMs / constraints.maxLatencyMs) * 100}
+                      className={`h-2 ${preTrainingCheck.latencyPass ? '' : 'bg-red-500'
+                        }`}
                     />
                     <p className="text-sm text-neutral-500">
                       {selectedPipeline.estimatedLatencyMs}ms of {constraints.maxLatencyMs}ms limit
@@ -348,19 +345,26 @@ export default function TrainConfirmPage() {
 
           {/* Navigation */}
           <div className="flex justify-between">
-            <Button variant="outline" onClick={handleBack}>
+            <Button variant="outline" onClick={handleBack} disabled={starting}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Pipeline Selection
             </Button>
             <Button
-              onClick={() => router.push('/training/plan')}
-              disabled={!preTrainingCheck.allPass}
-              className="bg-gradient-to-r from-brand-500 to-brand-600"
+              onClick={handleStartTraining}
+              disabled={!preTrainingCheck.allPass || starting}
+              className="bg-gradient-to-r from-brand-500 to-brand-600 min-w-[200px]"
             >
-              <>
-                <ArrowRight className="w-4 h-4 mr-2" />
-                Review Training Plan
-              </>
+              {starting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Initializing Pipeline...
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Execute Training
+                </>
+              )}
             </Button>
           </div>
         </div>

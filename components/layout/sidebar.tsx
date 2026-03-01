@@ -40,8 +40,8 @@ const WIZARD_STEPS = [
   { id: 'CONSTRAINTS_VALIDATED', label: 'Optimization', href: '/design/review', icon: Zap },
   { id: 'CANDIDATES_GENERATED', label: 'Results', href: '/design/results', icon: Lightbulb },
   { id: 'EXECUTION_APPROVED', label: 'Confirm', href: '/train/confirm', icon: CheckCircle2 },
-  { id: 'TRAINING_RUNNING', label: 'Training', href: '/train/running', icon: Cpu },
-  { id: 'TRAINING_COMPLETED', label: 'Results', href: '/train/result', icon: Activity },
+  { id: 'TRAINING_RUNNING', label: 'Execution', href: '#', icon: Cpu },
+  { id: 'TRAINING_COMPLETED', label: 'Finalized', href: '#', icon: Activity },
 ]
 
 function SidebarComponent() {
@@ -64,7 +64,7 @@ function SidebarComponent() {
     { label: 'Pipelines', href: '/pipelines', icon: Zap, color: 'text-brand-400' },
     { label: 'Runs', href: '/runs', icon: Activity, color: 'text-emerald-400' },
     { label: 'Failures', href: '/failures', icon: AlertCircle, color: 'text-red-400' },
-    { label: 'Design Agent', href: '/design-agent', icon: Lightbulb, color: 'text-purple-400' },
+    { label: 'AI Architect', href: '/design/ai-architect', icon: Sparkles, color: 'text-cyan-400' },
     { label: 'Approvals', href: '/approvals', icon: CheckCircle2, color: 'text-green-400' },
   ]
 

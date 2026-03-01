@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, use } from 'next/navigation'
+import { useState, useEffect, use } from 'react'
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign, TrainingRun } from '@/hooks/use-design'
 import { getTrainingStatus } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
-  Database, ArrowRight, CheckCircle, AlertTriangle, 
-  Shield, Zap, DollarSign, Leaf, Clock, Play, Loader2, Target, 
-  Download, Upload, Trash2, ExternalLink, XCircle
+import {
+  Database, ArrowRight, CheckCircle, AlertTriangle,
+  Shield, Zap, DollarSign, Leaf, Clock, Play, Loader2, Target,
+  Download, Upload, Trash2, ExternalLink, XCircle, Activity
 } from 'lucide-react'
 
 interface TrainResultPageProps {
@@ -22,7 +22,7 @@ export default function TrainResultPage({ params }: TrainResultPageProps) {
   const router = useRouter()
   const { run_id } = use(params)
   const { dataset, constraints, selectedPipeline, trainingRun, setTrainingRun, resetDesign } = useDesign()
-  
+
   const [loading, setLoading] = useState(true)
   const [run, setRun] = useState<TrainingRun | null>(null)
   const [trainingStatus, setTrainingStatus] = useState<any>(null)
@@ -83,7 +83,7 @@ export default function TrainResultPage({ params }: TrainResultPageProps) {
         setLoading(false)
       }
     }
-    
+
     if (run_id) {
       loadResult()
     }
@@ -105,7 +105,7 @@ export default function TrainResultPage({ params }: TrainResultPageProps) {
   const isStopped = run?.status === 'stopped' || run_id === 'stopped' || trainingStatus?.status === 'stopped'
   const isBlocked = run?.status === 'blocked' || run_id === 'blocked'
   const isFailed = run?.status === 'failed' || run?.status === 'cancelled'
-  
+
   const canDownload = isCompleted && !isKilled && !isStopped
 
   const finalCostPass = (run?.costSpent || 0) <= constraints.maxCostUsd

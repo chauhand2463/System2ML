@@ -9,21 +9,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { 
+import {
   CheckCircle, AlertTriangle, DollarSign, Leaf, Clock, Loader2, XCircle
 } from 'lucide-react'
 
 export default function TrainRunningPage() {
   const router = useRouter()
   const { dataset, constraints, selectedPipeline, setDesignStep } = useDesign()
-  
+
   const [status, setStatus] = useState<TrainingStatusResponse | null>(null)
   const [polling, setPolling] = useState(true)
   const [stopping, setStopping] = useState(false)
   const [progress, setProgress] = useState(0)
 
   const projectId = typeof window !== 'undefined' ? localStorage.getItem('system2ml_project_id') : null
-  const trainingPlan = typeof window !== 'undefined' 
+  const trainingPlan = typeof window !== 'undefined'
     ? JSON.parse(localStorage.getItem('system2ml_training_plan') || '{}')
     : {}
 
@@ -35,14 +35,14 @@ export default function TrainRunningPage() {
 
   useEffect(() => {
     if (!polling) return
-    
+
     const pollInterval = setInterval(async () => {
       try {
         if (projectId) {
           const result = await getTrainingStatusByProject(projectId)
           setStatus(result)
           if (result.progress !== undefined) setProgress(result.progress)
-          
+
           if (result.status === 'completed') {
             setPolling(false)
             setDesignStep('result')
@@ -55,25 +55,26 @@ export default function TrainRunningPage() {
             router.push('/train/result/killed')
           }
         } else {
-          setProgress(prev => {
-            const next = prev + Math.random() * 10
-            if (next >= 100) {
-              setPolling(false)
-              setDesignStep('result')
-              router.push('/train/result/completed')
-              return 100
-            }
-            return Math.min(next, 100)
-          })
+          // Simulation mode
+          setProgress(prev => Math.min(prev + Math.random() * 10, 100))
         }
       } catch (error) {
         console.error('Poll error:', error)
         setProgress(prev => Math.min(prev + 5, 95))
       }
     }, 3000)
-    
+
     return () => clearInterval(pollInterval)
   }, [polling, projectId, router, setDesignStep])
+
+  // Handle completion in simulation mode
+  useEffect(() => {
+    if (!projectId && polling && progress >= 100) {
+      setPolling(false)
+      setDesignStep('result')
+      router.push('/train/result/completed')
+    }
+  }, [progress, polling, projectId, router, setDesignStep])
 
   const handleStopTraining = async () => {
     setStopping(true)

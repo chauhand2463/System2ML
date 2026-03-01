@@ -13,6 +13,20 @@ import random
 import json
 import logging
 import traceback
+import os
+
+# Load .env.local for GROQ_API_KEY and other secrets
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env.local')
+if os.path.exists(_env_path):
+    with open(_env_path, 'r') as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _key, _, _val = _line.partition('=')
+                _key = _key.strip()
+                _val = _val.strip().strip('"').strip("'")
+                if _key:
+                    os.environ[_key] = _val
 
 logger = logging.getLogger(__name__)
 
@@ -1603,6 +1617,85 @@ async def get_ai_suggestions(project_id: str):
     print(f"AI Suggestions for {project_id} took {duration:.4f}s")
     
     return {"suggestions": suggestions}
+
+
+# ===== GROQ LLM PIPELINE DESIGN =====
+
+class GroqDesignRequest(BaseModel):
+    dataset_profile: Dict[str, Any]
+    constraints: Dict[str, Any]
+    infra_context: Optional[Dict[str, Any]] = None
+
+class GroqExplainRequest(BaseModel):
+    pipeline_dsl: Dict[str, Any]
+    audience: str = "product_manager"
+    explain_level: str = "executive"
+
+
+@app.post("/api/groq/design")
+def groq_design_pipeline(request: GroqDesignRequest):
+    """
+    Full Groq-powered pipeline design:
+    Planner Agent → Schema Validator → Self-Critique → Explainability
+    """
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured on server")
+
+    try:
+        from agent.groq_service import GroqDesignOrchestrator
+        orchestrator = GroqDesignOrchestrator(api_key=groq_key)
+        result = orchestrator.run(
+            dataset_profile=request.dataset_profile,
+            constraints=request.constraints,
+            infra_context=request.infra_context,
+        )
+
+        # Log activity
+        status = result.get("status", "unknown") if result else "unknown"
+        critique = result.get("critique") or {}
+        issues_count = len(critique.get("issues", [])) if isinstance(critique, dict) else 0
+        ActivityStore.log(
+            type_="ai_design",
+            title=f"Groq AI Pipeline Design ({status})",
+            description=f"Elapsed: {result.get('elapsed_seconds', 0)}s | Issues: {issues_count}",
+            severity="low" if status == "success" else "high"
+        )
+
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=f"Groq API error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Groq design error: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Pipeline design failed: {str(e)}")
+
+
+@app.post("/api/groq/explain")
+def groq_explain_pipeline(request: GroqExplainRequest):
+    """
+    Generate UI-ready explainability JSON from a pipeline DSL.
+    """
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured on server")
+
+    try:
+        from agent.groq_service import GroqExplainAgent
+        agent = GroqExplainAgent(api_key=groq_key)
+        result = agent.explain(
+            pipeline_dsl=request.pipeline_dsl,
+            audience=request.audience,
+            explain_level=request.explain_level,
+        )
+        return result
+
+    except Exception as e:
+        logger.error(f"Groq explain error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Explanation failed: {str(e)}")
 
 
 if __name__ == "__main__":

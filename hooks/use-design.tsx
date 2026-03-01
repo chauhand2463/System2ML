@@ -7,9 +7,10 @@ export type Objective = 'accuracy' | 'robustness' | 'speed' | 'cost'
 export type Deployment = 'batch' | 'realtime' | 'edge'
 export type ComplianceLevel = 'none' | 'standard' | 'regulated' | 'highly_regulated'
 export type PipelineStatus = 'draft' | 'designed' | 'pending_training' | 'training' | 'completed' | 'failed'
-export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'quarantined'
+export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'quarantined' | 'killed' | 'stopped' | 'blocked'
 
 export interface DatasetProfile {
+  id: string
   name: string
   source: 'upload' | 'connection' | 'existing'
   type: DataType
@@ -134,7 +135,7 @@ export function DesignProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('system2ml_design_state')
       }
     }
-    
+
     // Also check for dataset stored by quick upload
     const datasetStored = localStorage.getItem('system2ml_dataset')
     if (datasetStored) {
