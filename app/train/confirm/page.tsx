@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign, TrainingRun } from '@/hooks/use-design'
-import { startTraining, validateExecution } from '@/lib/api'
+import { startTraining, validateExecution, createColabTraining, getColabNotebook } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -104,9 +104,10 @@ export default function TrainConfirmPage() {
     setStarting(true)
 
     try {
+      // First start local training
       const result = await startTraining({
         pipeline_id: selectedPipeline.id,
-        dataset_id: dataset.id,
+        dataset_id: dataset?.id || 'local',
         constraints: {
           max_cost_usd: constraints.maxCostUsd,
           max_carbon_kg: constraints.maxCarbonKg,
@@ -133,6 +134,39 @@ export default function TrainConfirmPage() {
 
       setTrainingRun(run)
       setStarted(true)
+
+      // Also create Colab job for real GPU training
+      try {
+        const trainingTarget = JSON.parse(localStorage.getItem('system2ml_training_target') || '{}')
+        
+        if (trainingTarget.base_model) {
+          const colabResult = await createColabTraining({
+            dataset_profile: {
+              name: dataset?.name || 'training_data',
+              type: dataset?.type || 'tabular',
+              rows: (dataset as any)?.rows || 1000,
+              columns: (dataset as any)?.columns || 10,
+              features: (dataset as any)?.features || 8,
+              has_labels: dataset?.labelPresent || true,
+              label_type: (dataset as any)?.labelType || 'classification',
+            },
+            training_target: trainingTarget,
+            constraints: {
+              max_cost_usd: constraints.maxCostUsd,
+              max_carbon_kg: constraints.maxCarbonKg,
+              max_latency_ms: constraints.maxLatencyMs,
+              compliance_level: constraints.complianceLevel,
+              deployment: 'batch',
+            },
+          })
+          
+          // Store Colab job info
+          localStorage.setItem('system2ml_colab_job', JSON.stringify(colabResult))
+          console.log('Colab job created:', colabResult)
+        }
+      } catch (colabError) {
+        console.error('Colab job creation failed:', colabError)
+      }
 
       // Navigate to running page
       setDesignStep('running')

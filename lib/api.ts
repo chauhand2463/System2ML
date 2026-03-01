@@ -887,6 +887,12 @@ export interface GroqDesignRequest {
     deployment?: string;
     objective_priority?: string[];
   };
+  training_target?: {
+    base_model: string;
+    method: 'lora' | 'qlora' | 'full_ft';
+    max_budget_usd: number;
+    gpu_allowed: boolean;
+  };
   infra_context?: {
     gpu_available: boolean;
     cloud_provider: string;
@@ -1062,6 +1068,81 @@ export async function explainPipeline(pipelineDSL: PipelineDSL, audience: string
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.error || error.detail || 'Explain request failed');
+  }
+
+  return response.json();
+}
+
+// ============================================
+// COLAB TRAINING API
+// ============================================
+
+export interface ColabTrainingRequest {
+  dataset_profile: {
+    name: string;
+    type: string;
+    rows: number;
+    columns: number;
+    features: number;
+    has_labels: boolean;
+    label_type: string;
+  };
+  training_target: {
+    base_model: string;
+    method: 'lora' | 'qlora' | 'full_ft';
+    max_budget_usd: number;
+    gpu_allowed: boolean;
+  };
+  constraints: {
+    max_cost_usd: number;
+    max_carbon_kg: number;
+    max_latency_ms: number;
+    compliance_level?: string;
+    deployment?: string;
+  };
+}
+
+export interface ColabJobResponse {
+  job_id: string;
+  status: string;
+  notebook_json?: string;
+  colab_link?: string;
+  config?: any;
+  message?: string;
+}
+
+export async function createColabTraining(request: ColabTrainingRequest): Promise<ColabJobResponse> {
+  const response = await fetch('/api/training/colab/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || error.detail || 'Failed to create training job');
+  }
+
+  return response.json();
+}
+
+export async function getColabJob(jobId: string): Promise<any> {
+  const response = await fetch(`/api/training/colab/job/${jobId}`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || error.detail || 'Failed to get job');
+  }
+
+  return response.json();
+}
+
+export async function getColabNotebook(jobId: string): Promise<{ notebook: any }> {
+  const response = await fetch(`/api/training/colab/notebook/${jobId}`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || error.detail || 'Failed to get notebook');
   }
 
   return response.json();

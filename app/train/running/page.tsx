@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign } from '@/hooks/use-design'
-import { getTrainingStatusByProject, stopTrainingProject, TrainingStatusResponse } from '@/lib/api'
+import { getTrainingStatusByProject, stopTrainingProject, TrainingStatusResponse, getColabJob } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
-  CheckCircle, AlertTriangle, DollarSign, Leaf, Clock, Loader2, XCircle
+  CheckCircle, AlertTriangle, DollarSign, Leaf, Clock, Loader2, XCircle, ExternalLink, Cpu
 } from 'lucide-react'
 
 export default function TrainRunningPage() {
@@ -95,6 +95,11 @@ export default function TrainRunningPage() {
   const costUsed = trainingPlan?.plan?.estimated_cost_usd ? (progress / 100) * trainingPlan.plan.estimated_cost_usd : 0
   const carbonUsed = trainingPlan?.plan?.estimated_carbon_kg ? (progress / 100) * trainingPlan.plan.estimated_carbon_kg : 0
 
+  // Get Colab job info
+  const colabJob = typeof window !== 'undefined' 
+    ? JSON.parse(localStorage.getItem('system2ml_colab_job') || '{}')
+    : {}
+
   return (
     <DashboardLayout>
       <div className="p-8 max-w-4xl mx-auto">
@@ -102,6 +107,48 @@ export default function TrainRunningPage() {
           <h1 className="text-3xl font-bold text-white mb-2">Training in Progress</h1>
           <p className="text-neutral-400">Pipeline: {selectedPipeline?.name || 'Training'}</p>
         </div>
+
+        {/* Colab Training Section */}
+        {colabJob?.job_id && (
+          <Card className="bg-gradient-to-r from-cyan-900/30 to-blue-900/30 border-cyan-500/20 mb-6">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-cyan-400" />
+                Colab GPU Training
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-black/30">
+                  <div>
+                    <p className="text-white font-medium">Job ID: {colabJob.job_id}</p>
+                    <p className="text-neutral-400 text-sm">
+                      Model: {colabJob?.config?.model_name} | Method: {colabJob?.config?.method?.toUpperCase()}
+                    </p>
+                  </div>
+                  <Badge className="bg-cyan-500/20 text-cyan-400">{colabJob.status}</Badge>
+                </div>
+                
+                {colabJob.colab_link && (
+                  <a 
+                    href={colabJob.colab_link} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full p-3 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-medium"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open in Google Colab
+                  </a>
+                )}
+                
+                <p className="text-xs text-neutral-500">
+                  Click "Open in Google Colab" to start real GPU training on Colab. 
+                  The training will run independently and you can monitor progress there.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="bg-neutral-900/50 border-white/5 mb-6">
           <CardHeader>

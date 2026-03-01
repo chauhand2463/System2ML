@@ -120,6 +120,19 @@ export default function AIArchitectPage() {
   // Editable config state
   const [profile, setProfile] = useState(DEFAULT_PROFILE)
   const [constraints, setConstraints] = useState(DEFAULT_CONSTRAINTS)
+  
+  // Training Target - Fine-tuning options
+  const [trainingTarget, setTrainingTarget] = useState<{
+    base_model: string;
+    method: 'lora' | 'qlora' | 'full_ft';
+    max_budget_usd: number;
+    gpu_allowed: boolean;
+  }>({
+    base_model: 'llama-3.1-8b',
+    method: 'lora',
+    max_budget_usd: 5,
+    gpu_allowed: true
+  })
 
   const handleDesign = async () => {
     setIsDesigning(true)
@@ -129,7 +142,8 @@ export default function AIArchitectPage() {
     try {
       const response = await designWithGroq({
         dataset_profile: profile,
-        constraints
+        constraints,
+        training_target: trainingTarget
       })
       setDesignResult(response)
     } catch (err: any) {
@@ -333,6 +347,50 @@ export default function AIArchitectPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Training Target - Fine-Tuning */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2"><Sparkles className="w-4 h-4 text-cyan-400" /> Fine-Tuning Target</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1 col-span-2">
+                  <span className="text-[10px] text-neutral-500 uppercase font-bold">Base Model (Open-Weight)</span>
+                  <select value={trainingTarget.base_model} onChange={e => setTrainingTarget(t => ({ ...t, base_model: e.target.value }))} className="w-full bg-neutral-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                    <option value="llama-3.1-8b">Llama 3.1 8B (16GB VRAM)</option>
+                    <option value="llama-3.1-70b">Llama 3.1 70B (140GB VRAM)</option>
+                    <option value="mistral-7b">Mistral 7B (14GB VRAM)</option>
+                    <option value="mixtral-8x7b">Mixtral 8x7B (56GB VRAM)</option>
+                    <option value="qwen-14b">Qwen 2.5 14B (28GB VRAM)</option>
+                    <option value="phi-3.5">Phi-3.5 Mini (4GB VRAM)</option>
+                  </select>
+                </label>
+                <label className="space-y-1 col-span-2">
+                  <span className="text-[10px] text-neutral-500 uppercase font-bold">Training Method</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['lora', 'qlora', 'full_ft'].map(m => (
+                      <label key={m} className={`flex items-center gap-2 p-2 rounded cursor-pointer border ${
+                        trainingTarget.method === m 
+                          ? 'border-cyan-500 bg-cyan-500/10' 
+                          : 'border-white/10 hover:border-white/20'
+                      }`}>
+                        <input type="radio" name="method" checked={trainingTarget.method === m} onChange={() => setTrainingTarget(t => ({...t, method: m as 'lora' | 'qlora' | 'full_ft'}))} className="accent-cyan-500" />
+                        <span className="text-xs text-white uppercase">{m === 'full_ft' ? 'Full FT' : m.toUpperCase()}</span>
+                      </label>
+                    ))}
+                  </div>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-neutral-500 uppercase font-bold">Training Budget (USD)</span>
+                  <input type="number" value={trainingTarget.max_budget_usd} onChange={e => setTrainingTarget(t => ({ ...t, max_budget_usd: +e.target.value }))} className="w-full bg-neutral-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-neutral-500 uppercase font-bold">GPU Execution</span>
+                  <div className="flex items-center gap-2 h-[38px]">
+                    <input type="checkbox" checked={trainingTarget.gpu_allowed} onChange={e => setTrainingTarget(t => ({ ...t, gpu_allowed: e.target.checked }))} className="rounded bg-neutral-800 border-white/20 text-cyan-500" />
+                    <span className="text-sm text-neutral-300">Colab GPU</span>
+                  </div>
+                </label>
               </div>
             </div>
           </div>

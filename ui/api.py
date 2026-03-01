@@ -1698,6 +1698,69 @@ def groq_explain_pipeline(request: GroqExplainRequest):
         raise HTTPException(status_code=500, detail=f"Explanation failed: {str(e)}")
 
 
+# ============================================
+# COLAB TRAINING ENDPOINTS
+# ============================================
+
+class ColabTrainingRequest(BaseModel):
+    dataset_profile: dict
+    training_target: dict
+    constraints: dict
+
+
+@app.post("/api/training/colab/create")
+def create_colab_training(request: ColabTrainingRequest):
+    """Create a new Colab training job"""
+    try:
+        from agent.colab_service import create_training_job
+        result = create_training_job(
+            dataset_profile=request.dataset_profile,
+            training_target=request.training_target,
+            constraints=request.constraints
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Colab training creation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/training/colab/job/{job_id}")
+def get_colab_job(job_id: str):
+    """Get Colab job status"""
+    try:
+        from agent.colab_service import get_training_job
+        result = get_training_job(job_id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get job error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/training/colab/notebook/{job_id}")
+def get_colab_notebook(job_id: str):
+    """Get the generated Colab notebook JSON"""
+    try:
+        from agent.colab_service import get_training_job
+        job = get_training_job(job_id)
+        if "error" in job:
+            raise HTTPException(status_code=404, detail=job["error"])
+        
+        notebook = job.get("notebook_json")
+        if not notebook:
+            raise HTTPException(status_code=404, detail="Notebook not found")
+        
+        return {"notebook": json.loads(notebook)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get notebook error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     # Enable reload=True for development to ensure changes are reflected
