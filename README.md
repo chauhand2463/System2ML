@@ -284,7 +284,7 @@ npm run build
 
 ## 📄 License
 
-MIT License - Copyright (c) 2026 **Chandan Kumar**
+MIT License - Copyright (c) 2026
 
 ---
 
