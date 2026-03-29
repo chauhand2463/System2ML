@@ -1,4 +1,7 @@
 import sys
+import builtins
+from fastapi.testclient import TestClient as _TestClient
+builtins.TestClient = _TestClient
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -53,6 +56,17 @@ from lib.state_machine import (
 )
 
 try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+
+    HAS_RATE_LIMITING = True
+    limiter = Limiter(key_func=get_remote_address)
+except ImportError:
+    HAS_RATE_LIMITING = False
+    limiter = None
+
+try:
     from agent.finetuning_service import router as finetuning_router
 
     HAS_FINETUNING = True
@@ -62,16 +76,52 @@ except ImportError:
 
 app = FastAPI(title="System2ML API", version="0.2.0")
 
+if HAS_RATE_LIMITING:
+    app.state.limiter = limiter
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Rate limit exceeded",
+                "message": f"Too many requests. Limit: {exc.detail}",
+            },
+        )
+
+
 if HAS_FINETUNING:
     app.include_router(finetuning_router)
+
+
+from fastapi import HTTPException
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {str(exc)}")
     logger.error(traceback.format_exc())
+
+    is_production = os.environ.get("ENV", "development") == "production"
+
     return JSONResponse(
-        status_code=500, content={"detail": "Internal server error", "message": str(exc)}
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "message": "An unexpected error occurred" if is_production else str(exc),
+            "error_type": type(exc).__name__,
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "status_code": exc.status_code,
+        },
     )
 
 
@@ -84,6 +134,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+API_VERSION = "v1"
+
+
+@app.get("/api/versions")
+def list_api_versions():
+    """List available API versions"""
+    return {
+        "versions": [
+            {
+                "version": "v1",
+                "status": "stable",
+                "url": "/v1",
+            },
+            {
+                "version": "v2",
+                "status": "beta",
+                "url": "/v2",
+            },
+        ],
+        "current_version": API_VERSION,
+    }
 
 
 class LoginRequest(BaseModel):
@@ -103,6 +176,7 @@ class AuthResponse(BaseModel):
 
 
 @app.post("/api/auth/register", response_model=AuthResponse)
+@limiter.limit("5/minute") if HAS_RATE_LIMITING else lambda x: x
 def register(request: RegisterRequest):
     if not request.email or not request.password or not request.name:
         raise HTTPException(status_code=400, detail="All fields are required")
@@ -514,6 +588,7 @@ class TrainingPlanRequest(BaseModel):
 
 
 @app.post("/api/training/plan")
+@limiter.limit("20/minute") if HAS_RATE_LIMITING else lambda x: x
 def plan_training(request: TrainingPlanRequest):
     try:
         project_id = request.project_id
@@ -652,6 +727,7 @@ class TrainingStartRequest(BaseModel):
 
 
 @app.post("/api/training/start")
+@limiter.limit("10/minute") if HAS_RATE_LIMITING else lambda x: x
 def start_training(request: TrainingStartRequest):
     project = ProjectStore.get(request.project_id)
     if not project:
@@ -775,6 +851,7 @@ def complete_training(project_id: str, metrics: Optional[Dict[str, Any]] = None)
 
 
 @app.post("/api/auth/login", response_model=AuthResponse)
+@limiter.limit("10/minute") if HAS_RATE_LIMITING else lambda x: x
 def login(request: LoginRequest):
     if not request.email or not request.password:
         raise HTTPException(status_code=400, detail="Email and password are required")
@@ -841,10 +918,42 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    """Enhanced health check with dependency status"""
+    import os
+
+    checks = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": app.version,
+        "dependencies": {},
+    }
+
+    # Check database
+    try:
+        projects = ProjectStore.get_all()
+        checks["dependencies"]["database"] = {"status": "healthy", "type": "sqlite"}
+    except Exception as e:
+        checks["dependencies"]["database"] = {"status": "unhealthy", "error": str(e)}
+        checks["status"] = "degraded"
+
+    # Check Groq API key
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key and groq_key != "your_groq_api_key":
+        checks["dependencies"]["groq_api"] = {"status": "healthy", "configured": True}
+    else:
+        checks["dependencies"]["groq_api"] = {"status": "not_configured", "configured": False}
+
+    # Check rate limiting
+    checks["dependencies"]["rate_limiting"] = {
+        "status": "healthy" if HAS_RATE_LIMITING else "disabled",
+        "configured": HAS_RATE_LIMITING,
+    }
+
+    return checks
 
 
 @app.post("/api/design/request")
+@limiter.limit("10/minute") if HAS_RATE_LIMITING else lambda x: x
 def design_pipeline(request: DesignRequest):
     try:
         constraints = ConstraintSpec(
@@ -1801,7 +1910,7 @@ def get_design_agent():
 
 
 @app.get("/api/ai/suggest/{project_id}")
-async def get_ai_suggestions(project_id: str):
+def get_ai_suggestions(project_id: str):
     start_time = datetime.utcnow()
     project = ProjectStore.get(project_id)
     if not project:

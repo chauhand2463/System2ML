@@ -4,10 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:all": "npm run dev:backend & npm run dev:frontend",
+    "dev:backend": "python -m uvicorn ui.api:app --reload --port 8000",
+    "dev:frontend": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
-    "generate-types": "openapi-typescript-codegen --input http://localhost:8000/openapi.json --output ./lib/api-types --client axios --useUnionTypes"
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "typecheck": "tsc --noEmit",
+    "typecheck:watch": "tsc --noEmit --watch",
+    "generate-types": "openapi-typescript-codegen --input http://localhost:8000/openapi.json --output ./lib/api-types --client axios --useUnionTypes",
+    "check": "npm run lint && npm run typecheck"
   },
   "engines": {
     "node": ">=18"

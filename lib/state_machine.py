@@ -22,15 +22,33 @@ class LifecycleState(str, Enum):
 VALID_TRANSITIONS = {
     None: [LifecycleState.DATASET_UPLOADED],
     LifecycleState.DATASET_UPLOADED: [LifecycleState.DATASET_PROFILED],
-    LifecycleState.DATASET_PROFILED: [LifecycleState.DATASET_VALIDATED, LifecycleState.DATASET_UPLOADED],
+    LifecycleState.DATASET_PROFILED: [
+        LifecycleState.DATASET_VALIDATED,
+        LifecycleState.DATASET_UPLOADED,
+    ],
     LifecycleState.DATASET_VALIDATED: [LifecycleState.CONSTRAINTS_VALIDATED],
-    LifecycleState.CONSTRAINTS_VALIDATED: [LifecycleState.FEASIBILITY_APPROVED, LifecycleState.DATASET_PROFILED],
+    LifecycleState.CONSTRAINTS_VALIDATED: [
+        LifecycleState.FEASIBILITY_APPROVED,
+        LifecycleState.DATASET_PROFILED,
+    ],
     LifecycleState.FEASIBILITY_APPROVED: [LifecycleState.CANDIDATES_GENERATED],
-    LifecycleState.CANDIDATES_GENERATED: [LifecycleState.EXECUTION_APPROVED, LifecycleState.TRAINING_BLOCKED],
-    LifecycleState.EXECUTION_APPROVED: [LifecycleState.TRAINING_RUNNING, LifecycleState.TRAINING_BLOCKED],
-    LifecycleState.TRAINING_RUNNING: [LifecycleState.TRAINING_COMPLETED, LifecycleState.TRAINING_KILLED],
+    LifecycleState.CANDIDATES_GENERATED: [
+        LifecycleState.EXECUTION_APPROVED,
+        LifecycleState.TRAINING_BLOCKED,
+    ],
+    LifecycleState.EXECUTION_APPROVED: [
+        LifecycleState.TRAINING_RUNNING,
+        LifecycleState.TRAINING_BLOCKED,
+    ],
+    LifecycleState.TRAINING_RUNNING: [
+        LifecycleState.TRAINING_COMPLETED,
+        LifecycleState.TRAINING_KILLED,
+    ],
     LifecycleState.TRAINING_COMPLETED: [],
-    LifecycleState.TRAINING_BLOCKED: [LifecycleState.DATASET_UPLOADED, LifecycleState.EXECUTION_APPROVED],
+    LifecycleState.TRAINING_BLOCKED: [
+        LifecycleState.DATASET_UPLOADED,
+        LifecycleState.EXECUTION_APPROVED,
+    ],
     LifecycleState.TRAINING_KILLED: [LifecycleState.DATASET_UPLOADED],
 }
 
@@ -51,7 +69,8 @@ class InvalidTransitionError(Exception):
     def __init__(self, current: LifecycleState, target: LifecycleState):
         self.current = current
         self.target = target
-        super().__init__(f"Cannot transition from {current.value} to {target.value}")
+        current_str = current.value if current else "None"
+        super().__init__(f"Cannot transition from {current_str} to {target.value}")
 
 
 @dataclass
@@ -84,18 +103,18 @@ class ProjectState:
     training_result: Optional[Dict[str, Any]] = None
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    
+
     def can_transition_to(self, target: LifecycleState) -> bool:
         allowed = VALID_TRANSITIONS.get(self.current_state, [])
         return target in allowed
-    
+
     def transition_to(self, target: LifecycleState, metadata: Dict[str, Any] = None) -> bool:
         if not self.can_transition_to(target):
             raise InvalidTransitionError(self.current_state, target)
-        
+
         self.current_state = target
         self.updated_at = datetime.utcnow().isoformat()
-        
+
         if metadata:
             if target == LifecycleState.DATASET_PROFILED:
                 self.profile_info = metadata
@@ -115,38 +134,36 @@ class ProjectState:
             elif target == LifecycleState.TRAINING_COMPLETED:
                 self.training_result = metadata
         return True
-    
+
     def get_allowed_next_states(self) -> List[LifecycleState]:
         return VALID_TRANSITIONS.get(self.current_state, [])
-    
+
     def get_blocking_errors(self) -> List[ValidationError]:
         return [e for e in self.validation_errors if e.code.startswith("BLOCK_")]
-    
+
     def is_blocked(self) -> bool:
         return len(self.get_blocking_errors()) > 0
 
 
 class ProjectStore:
     _projects: Dict[str, ProjectState] = {}
-    
+
     @classmethod
     def create(cls, name: str) -> ProjectState:
         project = ProjectState(
-            id=str(uuid.uuid4())[:8],
-            name=name,
-            current_state=LifecycleState.DATASET_UPLOADED
+            id=str(uuid.uuid4())[:8], name=name, current_state=LifecycleState.DATASET_UPLOADED
         )
         cls._projects[project.id] = project
         return project
-    
+
     @classmethod
     def get(cls, project_id: str) -> Optional[ProjectState]:
         return cls._projects.get(project_id)
-    
+
     @classmethod
     def get_all(cls) -> List[ProjectState]:
         return list(cls._projects.values())
-    
+
     @classmethod
     def update(cls, project_id: str, **kwargs) -> Optional[ProjectState]:
         project = cls._projects.get(project_id)
@@ -156,7 +173,7 @@ class ProjectStore:
                     setattr(project, key, value)
             project.updated_at = datetime.utcnow().isoformat()
         return project
-    
+
     @classmethod
     def delete(cls, project_id: str) -> bool:
         if project_id in cls._projects:
