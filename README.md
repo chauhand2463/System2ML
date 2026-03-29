@@ -59,6 +59,8 @@
 - ⚡ **Live Monitoring**: Real-time training with auto-stop capabilities
 - 🎯 **Feasibility Engine**: Only generates pipelines that can actually run
 - 🏢 **Enterprise-Ready**: OAuth, approvals, and complete audit trails
+- 🤖 **AI-Powered Design**: Groq Llama-3.3 powered pipeline synthesis
+- ☁️ **Colab Integration**: Auto-generate and download training notebooks
 
 ---
 
@@ -76,14 +78,24 @@
 4. **Review** - Validate constraints & generate candidates
 5. **Results** - Select feasible pipeline
 
+### AI Architect
+- 🧠 Groq Llama-3.3 powered pipeline synthesis
+- 📝 Self-critique and explainability
+- ✅ Schema validation
+- 🎯 Model eligibility matrix
+
 ### Training Pipeline
 1. **Pre-Training Gate** - Final feasibility check
 2. **Live Training** - Real-time progress & constraint monitoring
 3. **Results** - Post-training metrics & model artifacts
 
+### Training Options
+- 💻 **Local GPU Training** - Train on your machine
+- ☁️ **Google Colab** - Auto-generate notebooks for cloud GPU training
+
 ### Pipeline Designer
 - 🎨 Visual DAG editor with drag-and-drop
-- 📦 10 node types (Source, Transform, Model, Sink, Monitor)
+- 📦 10+ node types (Source, Transform, Model, Sink, Monitor)
 
 ### Enterprise Features
 - 🔐 OAuth (Google, GitHub)
@@ -103,6 +115,7 @@
 | **Database** | SQLite |
 | **Deployment** | Vercel (Frontend), Render (Backend) |
 | **Authentication** | OAuth (Google, GitHub) |
+| **AI** | Groq Llama-3.3 |
 
 ---
 
@@ -110,23 +123,31 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Frontend (Next.js 16)                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Datasets │  │  Design  │  │  Train   │  │   Pipeline   │  │
-│  │  Pages   │  │  Wizard  │  │  Pages   │  │   Designer   │  │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘  │
+│                    Frontend (Next.js 16)                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐       │
+│  │ Datasets │  │  Design  │  │  Train   │  │   Pipeline   │       │
+│  │  Pages   │  │  Wizard  │  │  Pages   │  │   Designer   │       │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘       │ 
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐       │
+│  │ AI Arch. │  │ Colab    │  │ Monitoring│  │  Governance  │       │
+│  │          │  │ Notebook │  │           │  │              │       │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────┘       │ 
 └───────────────────────────┬─────────────────────────────────────┘
                             │ REST API
 ┌───────────────────────────┴─────────────────────────────────────┐
 │                      Backend (FastAPI)                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐   │
-│  │  Validation │  │ Feasibility  │  │   Training Engine  │   │
-│  │    API      │  │    Policy    │  │                    │   │
-│  └──────────────┘  └──────────────┘  └────────────────────┘   │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐   │
-│  │  Dataset    │  │    Safety    │  │   Eligibility     │   │
-│  │  Profiling  │  │     Gate     │  │      Matrix       │   │
-│  └──────────────┘  └──────────────┘  └────────────────────┘   │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐     │
+│  │  Validation │  │ Feasibility  │   │   Training Engine   │    │
+│  │    API      │  │    Policy    │   │                     │    │
+│  └──────────────┘  └──────────────┘  └────────────────────┘     │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐     │
+│  │  Dataset    │  │    Safety    │   │   Eligibility       │    │
+│  │  Profiling  │  │     Gate     │   │      Matrix         │    │
+│  └──────────────┘  └──────────────┘  └────────────────────┘     │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐     │
+│  │  Groq LLM    │  │  Colab       │   │   State Machine     │    │
+│  │  Pipeline    │  │  Service     │   │                     │    │
+│  └──────────────┘  └──────────────┘  └────────────────────┘     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -138,7 +159,7 @@
 
 - Node.js 18+
 - Python 3.10+
-- pnpm or npm
+- npm or pnpm
 
 ### Installation
 
@@ -156,15 +177,41 @@ npm install
 pnpm install
 ```
 
+### Environment Variables
+
+Create a `.env.local` file in the root directory:
+
+```env
+# Backend API
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Groq API (for AI Architect)
+GROQ_API_KEY=your_groq_api_key
+
+# OAuth (optional)
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+```
+
 ### Development Mode
 
 ```bash
 # Run both frontend and backend
 npm run dev:all
+
+# Or run them separately:
+# Terminal 1 - Backend
+python -m uvicorn ui.api:app --reload --port 8000
+
+# Terminal 2 - Frontend
+npm run dev
 ```
 
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
 ---
 
@@ -176,6 +223,7 @@ npm run dev:all
 |--------|----------|-------------|
 | POST | `/api/datasets/profile` | Profile a dataset |
 | POST | `/api/datasets/validate` | Validate against constraints |
+| POST | `/api/datasets/upload` | Upload dataset file |
 | GET | `/api/datasets` | List all datasets |
 
 ### Design & Validation API
@@ -195,6 +243,8 @@ npm run dev:all
 | POST | `/api/training/start` | Start training |
 | GET | `/api/training/{run_id}` | Get training status |
 | POST | `/api/training/{run_id}/stop` | Stop training |
+| POST | `/api/training/plan` | Plan training |
+| POST | `/api/training/colab/create` | Create Colab notebook |
 
 ### Pipeline API
 
@@ -205,6 +255,14 @@ npm run dev:all
 | POST | `/api/pipelines/{id}/execute` | Execute pipeline |
 | GET | `/api/runs` | List runs |
 
+### Lifecycle API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/lifecycle/state/{project_id}` | Get project state |
+| POST | `/api/lifecycle/transition/{project_id}` | Transition state |
+| GET | `/api/lifecycle/validate/{project_id}` | Validate state access |
+
 ---
 
 ## 📂 Project Structure
@@ -212,43 +270,65 @@ npm run dev:all
 ```
 system2ml/
 ├── app/                          # Next.js App Router
-│   ├── api/                      # OAuth callbacks
+│   ├── api/                      # OAuth callbacks, internal APIs
+│   │   └── training/colab/       # Colab notebook generation
 │   ├── datasets/new/             # Dataset intake
 │   ├── design/                   # Design wizard
+│   │   ├── input/               # Dataset input
+│   │   ├── constraints/         # Constraint setting
+│   │   ├── preferences/         # User preferences
+│   │   ├── review/              # Review & validate
+│   │   ├── results/             # Pipeline selection
+│   │   └── ai-architect/        # AI-powered design
 │   ├── train/                    # Training pages
+│   │   ├── confirm/             # Pre-training confirmation
+│   │   ├── running/             # Live training
+│   │   └── result/              # Training results
 │   ├── pipelines/                # Pipeline management
-│   ├── runs/                     # Run history
-│   ├── failures/                 # Failure memory
-│   ├── monitoring/               # Drift detection
-│   ├── design-agent/              # AI proposals
-│   ├── approvals/                # Approval workflow
-│   ├── governance/               # Audit logs
-│   └── login/                    # Authentication
+│   ├── runs/                    # Run history
+│   ├── failures/                # Failure memory
+│   ├── monitoring/              # Drift detection
+│   ├── approvals/               # Approval workflow
+│   ├── governance/              # Audit logs
+│   ├── login/                   # Authentication
+│   └── register/                # Registration
 │
 ├── components/                   # React components
-│   ├── layout/                   # Layout (sidebar, header)
+│   ├── layout/                  # Layout (sidebar, header)
 │   ├── pipelines/                # Pipeline designer
 │   ├── dashboard/                # Dashboard widgets
-│   └── ui/                       # shadcn/ui components
+│   ├── design/                   # Design components
+│   └── ui/                      # shadcn/ui components
 │
 ├── hooks/                        # React hooks
-│   ├── use-auth.tsx             # Authentication
-│   └── use-design.tsx           # Design flow state
+│   ├── use-auth.tsx            # Authentication
+│   ├── use-design.tsx          # Design flow state
+│   └── use-workflow.tsx       # Workflow state
 │
 ├── lib/                          # Core libraries
 │   ├── api.ts                   # API client
 │   ├── types.ts                 # TypeScript types
-│   ├── validation/              # Constraint validation
+│   ├── utils.ts                 # Utilities
+│   ├── state_machine.py         # Lifecycle state machine
 │   ├── feasibility/             # Policy engine
 │   └── safety/                  # Safety gate
 │
 ├── agent/                        # AI Agent
 │   ├── planner.py               # Design planner
-│   └── rl_policy.py            # RL policy
+│   ├── colab_service.py         # Colab notebook generation
+│   └── training_engine.py       # Training execution
 │
 ├── ui/                          # FastAPI Backend
 │   ├── api.py                   # All API routes
 │   └── database.py              # SQLite database
+│
+├── governance/                   # Governance
+│   ├── policies.yaml            # Governance policies
+│   └── audit_logger.py          # Audit logging
+│
+├── memory/                       # Memory
+│   ├── embeddings.py             # Vector embeddings
+│   └── failure_store.py         # Failure memory
 │
 ├── public/                      # Static assets
 ├── pyproject.toml               # Python config
@@ -282,19 +362,13 @@ npm run build
 
 ---
 
-## 📄 License
-
-MIT License - Copyright (c) 2026 **Chandan Kumar**
-
----
-
 ## 🤝 Connect With Me
 
 <p align="center">
   <a href="https://github.com/chauhand2463">
     <img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub" />
   </a>
-  <a href="https://linkedin.com/in/">
+  <a href="https://linkedin.com/in/dhairy-chauhan">
     <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn" />
   </a>
   <a href="https://twitter.com/chauhand2463">

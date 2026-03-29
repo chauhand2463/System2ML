@@ -34,6 +34,7 @@ export interface UserConstraints {
   maxLatencyMs: number
   complianceLevel: ComplianceLevel
   objective: Objective
+  deployment: Deployment
 }
 
 export interface PipelineCandidate {
@@ -108,6 +109,7 @@ const defaultConstraints: UserConstraints = {
   maxLatencyMs: 200,
   complianceLevel: 'standard',
   objective: 'accuracy',
+  deployment: 'batch',
 }
 
 const DesignContext = createContext<DesignContextType | undefined>(undefined)

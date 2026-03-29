@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { useDesign } from '@/hooks/use-design'
+import { useDesign, Objective, Deployment } from '@/hooks/use-design'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,15 @@ import {
 
 export default function DesignInputPage() {
   const router = useRouter()
-  const { dataset, canProceedToDesign, setDesignStep } = useDesign()
+  const { dataset, constraints, canProceedToDesign, setDesignStep, setConstraints } = useDesign()
+  
+  const [objective, setObjective] = useState<Objective>(constraints.objective)
+  const [deployment, setDeployment] = useState<Deployment>(constraints.deployment)
+
+  useEffect(() => {
+    setObjective(constraints.objective)
+    setDeployment(constraints.deployment)
+  }, [constraints.objective, constraints.deployment])
 
   useEffect(() => {
     if (!canProceedToDesign) {
@@ -27,6 +35,7 @@ export default function DesignInputPage() {
   }
 
   const handleNext = () => {
+    setConstraints({ objective, deployment })
     setDesignStep('constraints')
     router.push('/design/constraints')
   }
@@ -118,7 +127,11 @@ export default function DesignInputPage() {
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-sm text-neutral-400">Primary Objective</label>
-                  <select className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white">
+                  <select 
+                    className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white"
+                    value={objective}
+                    onChange={(e) => setObjective(e.target.value as Objective)}
+                  >
                     <option value="accuracy">Maximize Accuracy</option>
                     <option value="cost">Minimize Cost</option>
                     <option value="speed">Minimize Latency</option>
@@ -127,7 +140,11 @@ export default function DesignInputPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-neutral-400">Deployment Mode</label>
-                  <select className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white">
+                  <select 
+                    className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white"
+                    value={deployment}
+                    onChange={(e) => setDeployment(e.target.value as Deployment)}
+                  >
                     <option value="batch">Batch Processing</option>
                     <option value="realtime">Real-time Inference</option>
                     <option value="edge">Edge Deployment</option>

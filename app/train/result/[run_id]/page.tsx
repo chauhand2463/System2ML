@@ -36,7 +36,7 @@ export default function TrainResultPage({ params }: TrainResultPageProps) {
   
   const isKilled = run?.status === 'killed'
   const isStopped = run?.status === 'stopped'
-  const isCompleted = (run?.status === 'completed' || run?.status === 'success' || run?.status === 'running')
+  const isCompleted = run?.status === 'completed'
   const canDownload = isCompleted && allPassed
 
   // Event handlers
@@ -52,7 +52,7 @@ export default function TrainResultPage({ params }: TrainResultPageProps) {
     
     try {
       // Generate deployment package
-      const pipeline = selectedPipeline || {}
+      const pipeline = selectedPipeline || { name: 'system2ml-model', modelFamily: 'random_forest' }
       const deploymentConfig = {
         model_name: pipeline.name || 'system2ml-model',
         model_family: pipeline.modelFamily || 'random_forest',

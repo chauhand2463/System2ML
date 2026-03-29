@@ -18,7 +18,7 @@ export default function DesignPreferencesPage() {
   
   const [formData, setFormData] = useState({
     objective: constraints.objective,
-    deployment: 'batch' as const,
+    deployment: constraints.deployment,
     retraining: 'none' as const,
     modelPreferences: [] as string[],
   })
@@ -62,9 +62,11 @@ export default function DesignPreferencesPage() {
 
   const handleNext = () => {
     setConstraints({
-      ...constraints,
-      ...formData,
+      objective: formData.objective,
+      deployment: formData.deployment,
     })
+    localStorage.setItem('system2ml_retraining', formData.retraining)
+    localStorage.setItem('system2ml_model_preferences', JSON.stringify(formData.modelPreferences))
     setDesignStep('review')
     router.push('/design/review')
   }

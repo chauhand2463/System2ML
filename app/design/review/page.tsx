@@ -51,7 +51,7 @@ export default function DesignReviewPage() {
           max_latency_ms: constraints.maxLatencyMs,
           compliance_level: constraints.complianceLevel as any,
         },
-        deployment: 'batch' as const,
+        deployment: constraints.deployment as any,
       }
 
       const result = await generateCandidates(request)

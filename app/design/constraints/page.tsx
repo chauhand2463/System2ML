@@ -63,7 +63,7 @@ export default function DesignConstraintsPage() {
           max_latency_ms: formData.maxLatencyMs,
           compliance_level: formData.complianceLevel as any,
         },
-        deployment: 'batch' as const,
+        deployment: constraints.deployment as any,
       }
 
       const validation = await validateConstraints(request)
@@ -130,7 +130,7 @@ export default function DesignConstraintsPage() {
           {/* AI Advisor - GUIDANCE */}
           <div className="mb-6">
             <AIAssistant
-              projectId={projectId}
+              projectId={projectId || ''}
               onApply={(suggestion) => {
                 setFormData(prev => ({
                   ...prev,

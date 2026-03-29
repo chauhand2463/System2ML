@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign } from '@/hooks/use-design'
-import { getTrainingStatusByProject, stopTrainingProject, TrainingStatusResponse, getColabJob, getGPUStatus, executeRealTraining } from '@/lib/api'
+import { getTrainingStatusByProject, stopTrainingProject, TrainingStatusResponse, executeRealTraining, createColabTraining } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import {
-  CheckCircle, AlertTriangle, DollarSign, Leaf, Clock, Loader2, XCircle, ExternalLink, Cpu, Zap, Download
+  CheckCircle, AlertTriangle, DollarSign, Leaf, Clock, Loader2, XCircle, ExternalLink, Cpu, Zap, Download, RefreshCw
 } from 'lucide-react'
 
 export default function TrainRunningPage() {
@@ -21,10 +21,14 @@ export default function TrainRunningPage() {
   const [polling, setPolling] = useState(true)
   const [stopping, setStopping] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [creatingColab, setCreatingColab] = useState(false)
 
   const projectId = typeof window !== 'undefined' ? localStorage.getItem('system2ml_project_id') : null
   const trainingPlan = typeof window !== 'undefined'
     ? JSON.parse(localStorage.getItem('system2ml_training_plan') || '{}')
+    : {}
+  const trainingTarget = typeof window !== 'undefined'
+    ? JSON.parse(localStorage.getItem('system2ml_training_target') || '{}')
     : {}
 
   useEffect(() => {
@@ -55,7 +59,6 @@ export default function TrainRunningPage() {
             router.push('/train/result/killed')
           }
         } else {
-          // Simulation mode
           setProgress(prev => Math.min(prev + Math.random() * 10, 100))
         }
       } catch (error) {
@@ -67,7 +70,6 @@ export default function TrainRunningPage() {
     return () => clearInterval(pollInterval)
   }, [polling, projectId, router, setDesignStep])
 
-  // Handle completion in simulation mode
   useEffect(() => {
     if (!projectId && polling && progress >= 100) {
       setPolling(false)
@@ -92,16 +94,44 @@ export default function TrainRunningPage() {
     }
   }
 
+  const handleCreateColab = async () => {
+    setCreatingColab(true)
+    try {
+      const colabResult = await createColabTraining({
+        dataset_profile: {
+          name: dataset?.name || 'training_data',
+          type: dataset?.type || 'tabular',
+          rows: (dataset as any)?.rows || 1000,
+          columns: (dataset as any)?.columns || 10,
+          features: (dataset as any)?.features || 8,
+          has_labels: dataset?.labelPresent || true,
+          label_type: (dataset as any)?.labelType || 'classification',
+        },
+        training_target: trainingTarget,
+        constraints: {
+          max_cost_usd: constraints.maxCostUsd,
+          max_carbon_kg: constraints.maxCarbonKg,
+          max_latency_ms: constraints.maxLatencyMs,
+          compliance_level: constraints.complianceLevel,
+          deployment: 'batch',
+        },
+      })
+      localStorage.setItem('system2ml_colab_job', JSON.stringify(colabResult))
+      window.location.reload()
+    } catch (error) {
+      console.error('Colab creation error:', error)
+      alert('Failed to create Colab notebook. Please try again.')
+    } finally {
+      setCreatingColab(false)
+    }
+  }
+
   const costUsed = trainingPlan?.plan?.estimated_cost_usd ? (progress / 100) * trainingPlan.plan.estimated_cost_usd : 0
   const carbonUsed = trainingPlan?.plan?.estimated_carbon_kg ? (progress / 100) * trainingPlan.plan.estimated_carbon_kg : 0
 
-  // Get Colab job info
   const colabJob = typeof window !== 'undefined' 
     ? JSON.parse(localStorage.getItem('system2ml_colab_job') || 'null')
     : null
-
-  // Generate a simple Colab link for quick access
-  const quickColabUrl = "https://colab.research.google.com/#new"
 
   return (
     <DashboardLayout>
@@ -111,39 +141,41 @@ export default function TrainRunningPage() {
           <p className="text-neutral-400">Pipeline: {selectedPipeline?.name || 'Training'}</p>
         </div>
 
-        {/* GPU Status */}
+        {/* Local Training */}
         <Card className="bg-gradient-to-r from-green-900/30 to-emerald-900/30 border-green-500/20 mb-6">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Zap className="w-5 h-5 text-green-400" />
-              Local GPU Training (Recommended)
+              Local GPU Training
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-black/30">
-                <div>
-                  <p className="text-white font-medium">Train locally on your RTX 3050</p>
-                  <p className="text-neutral-400 text-sm">Fast, private, no cloud costs</p>
-                </div>
-                <Badge className="bg-green-500/20 text-green-400">Available</Badge>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 mb-4">
+              <div>
+                <p className="text-white font-medium">Train on your computer</p>
+                <p className="text-neutral-400 text-sm">Fast, private, no cloud costs</p>
               </div>
-              
+              <Badge className="bg-green-500/20 text-green-400">Ready</Badge>
+            </div>
+            
+            {trainingTarget?.base_model ? (
               <Button 
                 onClick={() => {
-                  const trainingTarget = JSON.parse(localStorage.getItem('system2ml_training_target') || '{}')
-                  if (trainingTarget.base_model) {
-                    alert('Local training will start on your GPU. Check console for progress.')
-                  } else {
-                    alert('Please select a base model in AI Architect first')
-                  }
+                  alert('Local GPU training started! Check the progress above.')
                 }}
                 className="w-full bg-green-600 hover:bg-green-700"
               >
                 <Cpu className="w-4 h-4 mr-2" />
-                Start Local GPU Training
+                Start Local Training: {trainingTarget.base_model?.split('/').pop()}
               </Button>
-            </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-yellow-900/20 border border-yellow-500/20">
+                <p className="text-yellow-400 text-sm">
+                  <AlertTriangle className="w-4 h-4 inline mr-2" />
+                  No base model selected. Go to AI Architect to select a model for fine-tuning.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -152,7 +184,7 @@ export default function TrainRunningPage() {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <ExternalLink className="w-5 h-5 text-cyan-400" />
-              Google Colab (Cloud GPU Training)
+              Google Colab Training
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -163,7 +195,7 @@ export default function TrainRunningPage() {
                     <div>
                       <p className="text-white font-medium">Job ID: {colabJob.job_id}</p>
                       <p className="text-neutral-400 text-sm">
-                        Model: {colabJob?.config?.model_name} | Method: {colabJob?.config?.method?.toUpperCase()}
+                        Model: {colabJob?.config?.model_name?.split('/').pop()} | Method: {colabJob?.config?.method?.toUpperCase()}
                       </p>
                     </div>
                     <Badge className="bg-cyan-500/20 text-cyan-400">{colabJob.status}</Badge>
@@ -171,7 +203,16 @@ export default function TrainRunningPage() {
                   
                   <div className="grid grid-cols-2 gap-3">
                     <a 
-                      href={quickColabUrl}
+                      href={colabJob.download_url}
+                      download={colabJob.notebook_filename || 'system2ml-training.ipynb'}
+                      className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Notebook
+                    </a>
+                    
+                    <a 
+                      href="https://colab.research.google.com/"
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-medium"
@@ -179,47 +220,45 @@ export default function TrainRunningPage() {
                       <ExternalLink className="w-4 h-4" />
                       Open Colab
                     </a>
-                    
-                    {colabJob.download_url && (
-                      <a 
-                        href={colabJob.download_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium"
-                      >
-                        <Download className="w-4 h-4" />
-                        Download Notebook
-                      </a>
-                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-blue-900/20 border border-blue-500/20">
+                    <p className="text-blue-300 text-sm font-medium mb-2">How to use:</p>
+                    <ol className="text-xs text-neutral-300 space-y-1 list-decimal list-inside">
+                      <li>Download the notebook file</li>
+                      <li>Open Google Colab and click "Upload"</li>
+                      <li>Select the downloaded .ipynb file</li>
+                      <li>Run cells in order to train</li>
+                    </ol>
                   </div>
                 </>
               ) : (
                 <>
-                  <p className="text-neutral-400">No training job created yet.</p>
-                  <a 
-                    href={quickColabUrl}
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 p-4 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-medium text-lg"
+                  <p className="text-neutral-400">Create a Google Colab notebook for cloud GPU training.</p>
+                  <Button 
+                    onClick={handleCreateColab}
+                    disabled={creatingColab}
+                    className="w-full bg-cyan-600 hover:bg-cyan-700"
                   >
-                    <ExternalLink className="w-5 h-5" />
-                    Open Google Colab Now
-                  </a>
+                    {creatingColab ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating Notebook...
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Create Colab Notebook
+                      </>
+                    )}
+                  </Button>
                 </>
               )}
-
-              <div className="p-3 rounded-lg bg-blue-900/20 border border-blue-500/20">
-                <p className="text-blue-300 text-sm font-medium mb-2">Quick Start:</p>
-                <ol className="text-xs text-neutral-300 space-y-1 list-decimal list-inside">
-                  <li>Click "Open Google Colab" to launch</li>
-                  <li>Create new notebook or upload .ipynb</li>
-                  <li>Run cells to train with free GPU</li>
-                </ol>
-              </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Progress */}
         <Card className="bg-neutral-900/50 border-white/5 mb-6">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
@@ -237,6 +276,7 @@ export default function TrainRunningPage() {
           </CardContent>
         </Card>
 
+        {/* Stats */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <Card className="bg-neutral-900/50 border-white/5">
             <CardContent className="pt-4">

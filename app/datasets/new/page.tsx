@@ -108,6 +108,7 @@ export default function NewDatasetPage() {
 
       // Build profile for hook - map field names correctly (snake_case to camelCase)
       const hookProfile = {
+        id: `dataset-${Date.now()}`,
         name: ds.name || file.name,
         source: 'upload' as const,
         type: (ds.type || 'tabular') as any,

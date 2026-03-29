@@ -16,6 +16,16 @@ export type NodeType =
   | 'merger'
   | 'feature_engineering'
   | 'preprocessing'
+  | 'rag'
+  | 'etl'
+  | 'elt'
+  | 'streaming'
+  | 'lambda'
+  | 'kappa'
+  | 'vectorstore'
+  | 'embeddings'
+  | 'api'
+  | 'container'
 
 export interface PipelineNode {
   id: string
@@ -248,7 +258,174 @@ const NODE_TEMPLATES: Record<NodeType, NodeTemplate> = {
       { name: 'handle_outliers', label: 'Handle Outliers', type: 'select', options: ['none', 'clip', 'remove', 'transform'], description: 'What to do with outliers' },
       { name: 'imputation_method', label: 'Imputation', type: 'select', options: ['mean', 'median', 'mode', 'knn', 'none'], description: 'How to fill missing values' },
     ]
-  }
+  },
+
+  // Advanced Pipeline Types
+  rag: {
+    label: 'RAG Pipeline',
+    description: 'Retrieval-Augmented Generation',
+    color: 'bg-violet-500/20 border-violet-500 text-violet-400',
+    icon: Workflow,
+    defaultConfig: { vector_db: 'pinecone', chunk_size: 512, overlap: 50, top_k: 5, retrieval_method: 'similarity', rerank: false },
+    defaultInputs: ['documents', 'query'],
+    defaultOutputs: ['context', 'response'],
+    configFields: [
+      { name: 'vector_db', label: 'Vector Database', type: 'select', options: ['pinecone', 'weaviate', 'faiss', 'chroma', 'milvus'], description: 'Where to store embeddings' },
+      { name: 'chunk_size', label: 'Chunk Size', type: 'number', placeholder: '512', description: 'Text chunk size for splitting' },
+      { name: 'overlap', label: 'Chunk Overlap', type: 'number', placeholder: '50', description: 'Overlap between chunks' },
+      { name: 'top_k', label: 'Top K', type: 'number', placeholder: '5', description: 'Number of results to retrieve' },
+      { name: 'retrieval_method', label: 'Retrieval Method', type: 'select', options: ['similarity', 'mmr', 'similarity_threshold'], description: 'How to retrieve docs' },
+      { name: 'rerank', label: 'Enable Reranking', type: 'boolean', description: 'Rerank results for better relevance' },
+    ]
+  },
+
+  etl: {
+    label: 'ETL Pipeline',
+    description: 'Extract, Transform, Load',
+    color: 'bg-cyan-500/20 border-cyan-500 text-cyan-400',
+    icon: Workflow,
+    defaultConfig: { extract_method: 'database', transform_operations: ['clean', 'validate', 'aggregate'], load_destination: 'warehouse', incremental: false },
+    defaultInputs: ['raw_data'],
+    defaultOutputs: ['processed_data'],
+    configFields: [
+      { name: 'extract_method', label: 'Extract From', type: 'select', options: ['database', 'api', 'file', 's3', 'http'], description: 'Data source type' },
+      { name: 'transform_operations', label: 'Transform Operations', type: 'json', placeholder: '["clean", "validate"]', description: 'Transformations to apply' },
+      { name: 'load_destination', label: 'Load To', type: 'select', options: ['warehouse', 'database', 's3', 'bigquery', 'snowflake'], description: 'Where to load data' },
+      { name: 'incremental', label: 'Incremental Load', type: 'boolean', description: 'Load only new data' },
+      { name: 'schedule', label: 'Schedule', type: 'select', options: ['hourly', 'daily', 'weekly', 'monthly'], description: 'How often to run' },
+    ]
+  },
+
+  elt: {
+    label: 'ELT Pipeline',
+    description: 'Extract, Load, Transform',
+    color: 'bg-teal-500/20 border-teal-500 text-teal-400',
+    icon: Workflow,
+    defaultConfig: { extract_from: 's3', load_mode: 'append', transform_in_place: true, sql_transforms: [], warehouse: 'snowflake' },
+    defaultInputs: ['raw_data'],
+    defaultOutputs: ['transformed_data'],
+    configFields: [
+      { name: 'extract_from', label: 'Extract From', type: 'select', options: ['s3', 'gcs', 'azure_blob', 'api'], description: 'Cloud storage source' },
+      { name: 'load_mode', label: 'Load Mode', type: 'select', options: ['append', 'overwrite', 'upsert'], description: 'How to load data' },
+      { name: 'transform_in_place', label: 'Transform In Place', type: 'boolean', description: 'Transform after loading' },
+      { name: 'sql_transforms', label: 'SQL Transforms', type: 'json', placeholder: '["SELECT * FROM data"]', description: 'SQL transformations' },
+      { name: 'warehouse', label: 'Data Warehouse', type: 'select', options: ['snowflake', 'bigquery', 'redshift', 'databricks'], description: 'Target warehouse' },
+    ]
+  },
+
+  streaming: {
+    label: 'Streaming Pipeline',
+    description: 'Real-time data processing',
+    color: 'bg-orange-500/20 border-orange-500 text-orange-400',
+    icon: Activity,
+    defaultConfig: { stream_source: 'kafka', window_size: '5m', processing_mode: 'continuous', checkpoint_interval: 30 },
+    defaultInputs: ['stream_data'],
+    defaultOutputs: ['processed_stream'],
+    configFields: [
+      { name: 'stream_source', label: 'Stream Source', type: 'select', options: ['kafka', 'kinesis', 'pulsar', 'mqtt'], description: 'Streaming platform' },
+      { name: 'window_size', label: 'Window Size', type: 'text', placeholder: '5m', description: 'Time window for aggregation' },
+      { name: 'processing_mode', label: 'Processing Mode', type: 'select', options: ['continuous', 'batch', 'micro-batch'], description: 'How to process stream' },
+      { name: 'checkpoint_interval', label: 'Checkpoint Interval', type: 'number', placeholder: '30', description: 'Seconds between checkpoints' },
+      { name: 'watermark', label: 'Watermark Delay', type: 'number', placeholder: '5', description: 'Late data tolerance in minutes' },
+    ]
+  },
+
+  lambda: {
+    label: 'Lambda Architecture',
+    description: 'Batch + Speed layers',
+    color: 'bg-yellow-500/20 border-yellow-500 text-yellow-400',
+    icon: Layers,
+    defaultConfig: { batch_layer: 'hdfs', speed_layer: 'spark', serving_layer: 'redis', recompute_frequency: 'daily' },
+    defaultInputs: ['raw_data'],
+    defaultOutputs: ['batch_view', 'realtime_view', 'combined_view'],
+    configFields: [
+      { name: 'batch_layer', label: 'Batch Layer', type: 'select', options: ['hdfs', 's3', 'bigquery'], description: 'Batch processing storage' },
+      { name: 'speed_layer', label: 'Speed Layer', type: 'select', options: ['spark', 'flink', 'storm'], description: 'Real-time processing engine' },
+      { name: 'serving_layer', label: 'Serving Layer', type: 'select', options: ['redis', 'cassandra', 'elasticsearch'], description: 'Query layer' },
+      { name: 'recompute_frequency', label: 'Recompute Frequency', type: 'select', options: ['hourly', 'daily', 'weekly'], description: 'How often to recompute batch' },
+    ]
+  },
+
+  kappa: {
+    label: 'Kappa Architecture',
+    description: 'Stream-only architecture',
+    color: 'bg-lime-500/20 border-lime-500 text-lime-400',
+    icon: Workflow,
+    defaultConfig: { message_bus: 'kafka', replay_speed: '1x', state_management: 'rocksdb', exactly_once: true },
+    defaultInputs: ['stream'],
+    defaultOutputs: ['processed'],
+    configFields: [
+      { name: 'message_bus', label: 'Message Bus', type: 'select', options: ['kafka', 'pulsar', 'redpanda'], description: 'Streaming message system' },
+      { name: 'replay_speed', label: 'Replay Speed', type: 'select', options: ['1x', '10x', '100x'], description: 'Historical replay speed' },
+      { name: 'state_management', label: 'State Store', type: 'select', options: ['rocksdb', 'cassandra', 'dynamodb'], description: 'Where to store state' },
+      { name: 'exactly_once', label: 'Exactly Once', type: 'boolean', description: 'Enable exactly-once semantics' },
+    ]
+  },
+
+  vectorstore: {
+    label: 'Vector Store',
+    description: 'Store embeddings for RAG',
+    color: 'bg-fuchsia-500/20 border-fuchsia-500 text-fuchsia-400',
+    icon: Database,
+    defaultConfig: { provider: 'pinecone', index_name: 'embeddings', metric: 'cosine', dimension: 1536 },
+    defaultInputs: ['embeddings'],
+    defaultOutputs: ['indexed_vectors'],
+    configFields: [
+      { name: 'provider', label: 'Provider', type: 'select', options: ['pinecone', 'weaviate', 'milvus', 'qdrant', 'chroma'], description: 'Vector database' },
+      { name: 'index_name', label: 'Index Name', type: 'text', placeholder: 'embeddings', description: 'Name of the index' },
+      { name: 'metric', label: 'Similarity Metric', type: 'select', options: ['cosine', 'euclidean', 'dot_product'], description: 'Distance metric' },
+      { name: 'dimension', label: 'Embedding Dimension', type: 'number', placeholder: '1536', description: 'Vector dimension size' },
+    ]
+  },
+
+  embeddings: {
+    label: 'Embeddings',
+    description: 'Generate text embeddings',
+    color: 'bg-rose-500/20 border-rose-500 text-rose-400',
+    icon: Zap,
+    defaultConfig: { model: 'text-embedding-3-small', batch_size: 100, normalize: true, encoding_format: 'float' },
+    defaultInputs: ['texts'],
+    defaultOutputs: ['embeddings'],
+    configFields: [
+      { name: 'model', label: 'Embedding Model', type: 'select', options: ['text-embedding-3-small', 'text-embedding-3-large', 'text-embedding-ada-002', 'sentence-transformers'], description: 'Model to generate embeddings' },
+      { name: 'batch_size', label: 'Batch Size', type: 'number', placeholder: '100', description: 'Texts per batch' },
+      { name: 'normalize', label: 'Normalize Output', type: 'boolean', description: 'Normalize vectors to unit length' },
+      { name: 'encoding_format', label: 'Encoding Format', type: 'select', options: ['float', 'base64'], description: 'Output format' },
+    ]
+  },
+
+  api: {
+    label: 'API Endpoint',
+    description: 'Expose as REST API',
+    color: 'bg-blue-500/20 border-blue-500 text-blue-400',
+    icon: Zap,
+    defaultConfig: { method: 'POST', path: '/predict', authentication: 'api_key', rate_limit: 100 },
+    defaultInputs: ['model'],
+    defaultOutputs: ['api_endpoint'],
+    configFields: [
+      { name: 'method', label: 'HTTP Method', type: 'select', options: ['GET', 'POST', 'PUT'], description: 'API method' },
+      { name: 'path', label: 'Endpoint Path', type: 'text', placeholder: '/predict', description: 'API route' },
+      { name: 'authentication', label: 'Authentication', type: 'select', options: ['none', 'api_key', 'jwt', 'oauth'], description: 'Auth method' },
+      { name: 'rate_limit', label: 'Rate Limit', type: 'number', placeholder: '100', description: 'Requests per minute' },
+    ]
+  },
+
+  container: {
+    label: 'Container',
+    description: 'Docker container deployment',
+    color: 'bg-slate-500/20 border-slate-500 text-slate-400',
+    icon: HardDrive,
+    defaultConfig: { image: 'python:3.11', ports: [8080], env_vars: {}, memory_limit: '2g', cpu_limit: '1' },
+    defaultInputs: ['application'],
+    defaultOutputs: ['deployed_container'],
+    configFields: [
+      { name: 'image', label: 'Docker Image', type: 'text', placeholder: 'python:3.11', description: 'Container image' },
+      { name: 'ports', label: 'Ports', type: 'json', placeholder: '[8080]', description: 'Ports to expose' },
+      { name: 'env_vars', label: 'Environment Variables', type: 'json', placeholder: '{}', description: 'Environment vars' },
+      { name: 'memory_limit', label: 'Memory Limit', type: 'text', placeholder: '2g', description: 'Memory allocation' },
+      { name: 'cpu_limit', label: 'CPU Limit', type: 'text', placeholder: '1', description: 'CPU cores' },
+    ]
+  },
 }
 
 const POSITIONS: Record<NodeType, { x: number; y: number }> = {
@@ -261,7 +438,17 @@ const POSITIONS: Record<NodeType, { x: number; y: number }> = {
   splitter: { x: 650, y: 250 },
   merger: { x: 850, y: 100 },
   sink: { x: 850, y: 250 },
-  monitor: { x: 850, y: 400 }
+  monitor: { x: 850, y: 400 },
+  rag: { x: 50, y: 350 },
+  etl: { x: 250, y: 350 },
+  elt: { x: 450, y: 350 },
+  streaming: { x: 650, y: 350 },
+  lambda: { x: 850, y: 350 },
+  kappa: { x: 50, y: 450 },
+  vectorstore: { x: 250, y: 450 },
+  embeddings: { x: 450, y: 450 },
+  api: { x: 650, y: 450 },
+  container: { x: 850, y: 450 },
 }
 
 export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave }: PipelineDesignerProps) {

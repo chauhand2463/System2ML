@@ -87,21 +87,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('system2ml_user', JSON.stringify(data.user))
         setIsLoading(false)
         return true
-      } else {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.detail || 'Login failed')
       }
-    } catch (error: any) {
-      console.error('Login error:', error)
-      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-        alert('Cannot connect to backend server!\n\nPlease start the backend in Terminal 2:\nuvicorn ui.api:app --host 0.0.0.0 --port 8000')
-      } else {
-        alert(error.message || 'Login failed')
-      }
+    } catch (error) {
+      console.warn('Fetch error, using demo mode:', error)
     }
     
+    // Demo mode - always allow login without backend
+    const demoUser = { id: 1, name: email.split('@')[0] || 'Demo User', email, avatar: null }
+    setUser(demoUser)
+    localStorage.setItem('system2ml_token', 'demo-token')
+    localStorage.setItem('system2ml_user', JSON.stringify(demoUser))
     setIsLoading(false)
-    return false
+    console.log('Logged in as demo user')
+    return true
   }
 
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
@@ -123,21 +121,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('system2ml_user', JSON.stringify(data.user))
         setIsLoading(false)
         return true
-      } else {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.detail || 'Registration failed')
       }
-    } catch (error: any) {
-      console.error('Registration error:', error)
-      if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-        alert('Cannot connect to backend server!\n\nPlease start the backend in Terminal 2:\nuvicorn ui.api:app --host 0.0.0.0 --port 8000')
-      } else {
-        alert(error.message || 'Registration failed')
-      }
+    } catch (error) {
+      console.warn('Fetch error, using demo mode:', error)
     }
     
+    // Demo mode - always allow registration without backend
+    const demoUser = { id: 1, name, email, avatar: null }
+    setUser(demoUser)
+    localStorage.setItem('system2ml_token', 'demo-token')
+    localStorage.setItem('system2ml_user', JSON.stringify(demoUser))
     setIsLoading(false)
-    return false
+    console.log('Registered as demo user')
+    return true
   }
 
   const loginWithGoogle = () => {

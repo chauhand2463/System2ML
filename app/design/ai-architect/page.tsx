@@ -195,8 +195,12 @@ export default function AIArchitectPage() {
       maxCarbonKg: constraints.max_carbon_kg,
       maxLatencyMs: constraints.max_latency_ms,
       complianceLevel: constraints.compliance_level as any,
-      objective: (constraints.objective_priority?.[0] || 'accuracy') as any
+      objective: (constraints.objective_priority?.[0] || 'accuracy') as any,
+      deployment: (constraints.deployment || 'batch') as any
     })
+
+    // Save training target for Colab/local training
+    localStorage.setItem('system2ml_training_target', JSON.stringify(trainingTarget))
 
     setSelectedPipeline(candidate)
     setFeasibilityPassed(true)
