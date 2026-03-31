@@ -1,6 +1,7 @@
 import sys
 import builtins
 from fastapi.testclient import TestClient as _TestClient
+
 builtins.TestClient = _TestClient
 from pathlib import Path
 
@@ -1376,12 +1377,63 @@ def get_feasibility_policy(request: dict):
 
 @app.post("/api/feasibility/generate")
 def generate_pipeline_candidates(request: dict):
-    """Generate pipeline candidates based on constraints"""
+    """Generate pipeline candidates using AI based on constraints"""
+    from agent.ai_service import get_ai_service
+
     project_id = request.get("project_id")
     constraints = request.get("constraints", {})
+    data_profile = request.get("data_profile", {})
+    objective = request.get("objective", {})
+
     max_cost = constraints.get("max_cost_usd", 10)
     max_carbon = constraints.get("max_carbon_kg", 1.0)
     max_latency = constraints.get("max_latency_ms", 200)
+
+    try:
+        ai = get_ai_service()
+
+        dataset_info = {
+            "label_type": data_profile.get("type", "classification"),
+            "num_features": data_profile.get("num_features", 10),
+            "rows": data_profile.get("rows", 1000),
+            "data_types": data_profile.get("data_types", {}),
+        }
+
+        ai_result = ai.generate_pipeline(dataset_info, constraints)
+
+        if ai_result.get("status") == "success":
+            pipeline = ai_result.get("pipeline", {})
+            decision = ai_result.get("decision_summary", {})
+
+            candidates = [
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": f"AI-Designed {decision.get('recommended_model_family', 'ML')} Pipeline",
+                    "description": f"AI-generated pipeline: {', '.join(decision.get('rationale', []))}",
+                    "model_families": [decision.get("recommended_model_family", "classical")],
+                    "estimated_cost": ai_result.get("cost_estimate", {}).get(
+                        "monthly_usd", max_cost * 0.8
+                    ),
+                    "estimated_carbon": ai_result.get("carbon_estimate", {}).get(
+                        "monthly_kg", max_carbon * 0.5
+                    ),
+                    "estimated_latency_ms": max_latency,
+                    "estimated_accuracy": 0.85,
+                    "violates_constraints": [],
+                    "ai_generated": True,
+                    "pipeline_details": pipeline,
+                }
+            ]
+
+            return {
+                "candidates": candidates,
+                "feasible_count": 1,
+                "total_count": 1,
+                "ai_used": True,
+            }
+
+    except Exception as e:
+        logger.error(f"AI pipeline generation failed: {str(e)}")
 
     profiles = {
         "classical": {"cost": 0.5, "carbon": 0.01, "latency": 100, "accuracy": 0.82},
@@ -2021,31 +2073,24 @@ class GroqExplainRequest(BaseModel):
 @app.post("/api/groq/design")
 def groq_design_pipeline(request: GroqDesignRequest):
     """
-    Full Groq-powered pipeline design:
-    Planner Agent → Schema Validator → Self-Critique → Explainability
+    AI-powered pipeline design using Groq or Ollama.
+    Tries local Ollama first, falls back to Groq cloud API.
     """
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured on server")
+    from agent.ai_service import get_ai_service
 
     try:
-        from agent.groq_service import GroqDesignOrchestrator
-
-        orchestrator = GroqDesignOrchestrator(api_key=groq_key)
-        result = orchestrator.run(
+        ai = get_ai_service()
+        result = ai.generate_pipeline(
             dataset_profile=request.dataset_profile,
             constraints=request.constraints,
             infra_context=request.infra_context,
         )
 
-        # Log activity
-        status = result.get("status", "unknown") if result else "unknown"
-        critique = result.get("critique") or {}
-        issues_count = len(critique.get("issues", [])) if isinstance(critique, dict) else 0
+        status = result.get("status", "unknown")
         ActivityStore.log(
             type_="ai_design",
-            title=f"Groq AI Pipeline Design ({status})",
-            description=f"Elapsed: {result.get('elapsed_seconds', 0)}s | Issues: {issues_count}",
+            title=f"AI Pipeline Design ({status})",
+            description=f"Task: {result.get('decision_summary', {}).get('task_type', 'unknown')}",
             severity="low" if status == "success" else "high",
         )
 
@@ -2053,10 +2098,8 @@ def groq_design_pipeline(request: GroqDesignRequest):
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=f"Groq API error: {str(e)}")
     except Exception as e:
-        logger.error(f"Groq design error: {str(e)}")
+        logger.error(f"AI design error: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Pipeline design failed: {str(e)}")
 
@@ -2099,16 +2142,35 @@ class ColabTrainingRequest(BaseModel):
 
 @app.post("/api/training/colab/create")
 def create_colab_training(request: ColabTrainingRequest):
-    """Create a new Colab training job"""
+    """Create a new Colab training job with AI-generated notebook"""
     try:
-        from agent.colab_service import create_training_job
+        from agent.ai_service import get_ai_service
 
-        result = create_training_job(
-            dataset_profile=request.dataset_profile,
-            training_target=request.training_target,
-            constraints=request.constraints,
-        )
+        ai = get_ai_service()
+
+        config = {
+            "model_id": request.training_target.get("base_model", "microsoft/phi-2"),
+            "method": request.training_target.get("method", "lora"),
+            "num_epochs": 3,
+            "batch_size": 4,
+            "learning_rate": 2e-4,
+            "max_budget": request.training_target.get("max_budget_usd", 5),
+        }
+
+        notebook_json = ai.generate_notebook(config)
+
+        job_id = f"job_{uuid.uuid4().hex[:8]}"
+
+        result = {
+            "job_id": job_id,
+            "status": "ready",
+            "notebook_json": notebook_json,
+            "colab_link": "https://colab.research.google.com/#create=true",
+            "config": config,
+            "message": "AI-generated training notebook ready",
+        }
         return result
+
     except Exception as e:
         logger.error(f"Colab training creation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

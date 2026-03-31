@@ -13,6 +13,8 @@ dependencies = [
     "uvicorn>=0.24.0",
     "loguru>=0.7.0",
     "python-multipart>=0.0.9",
+    "groq>=0.4.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]

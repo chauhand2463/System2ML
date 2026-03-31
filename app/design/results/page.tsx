@@ -87,6 +87,25 @@ export default function DesignResultsPage() {
 
       if (result.can_execute) {
         setSelectedPipeline(candidate)
+        
+        // Map model family to actual HuggingFace model ID
+        const modelMap: Record<string, string> = {
+          'classical': 'microsoft/phi-2',
+          'small_deep': 'microsoft/Phi-3-mini-4k-instruct',
+          'compressed': 'microsoft/phi-2',
+          'transformer': 'meta-llama/Llama-3.1-8B-Instruct',
+          'random_forest': 'microsoft/phi-2',
+          'xgboost': 'microsoft/phi-2',
+          'logistic_regression': 'microsoft/phi-2',
+        }
+        
+        // Save training target for Colab notebook generation
+        const trainingTarget = {
+          base_model: modelMap[candidate.modelFamily] || 'microsoft/phi-2',
+          method: 'lora',
+          max_budget_usd: candidate.estimatedCost,
+        }
+        localStorage.setItem('system2ml_training_target', JSON.stringify(trainingTarget))
       }
     } catch (error) {
       console.error('Validation error:', error)

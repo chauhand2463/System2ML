@@ -7,7 +7,7 @@ import {
   CheckCircle, AlertTriangle, Loader2, Play, FileText, Settings,
   Database, BarChart3, Layers, Terminal, Sparkles, Info, Copy,
   Check, Upload, RefreshCw, Globe, BookOpen, Code2, FlaskConical,
-  Gauge, Save, FolderOpen, Trash2, Wand2, TrendingUp, Activity
+  Gauge, Save, FolderOpen, Trash2, Wand2, TrendingUp, Activity, Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -950,28 +950,64 @@ export default function FineTuningPage() {
   const handleGenerateNotebook = async () => {
     if (!config.model) return
     setGenerating(true)
-    await new Promise(r => setTimeout(r, 800))
-    const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
-    setNotebook(nb)
-    setTab('notebook')
     
-    // Add to history
-    const newHistoryItem: TrainingHistory = {
-      id: `finetune-${Date.now()}`,
-      modelName: config.model.name,
-      modelId: config.model.hf_id,
-      method: config.method,
-      taskType: config.task_type,
-      epochs: config.epochs,
-      batchSize: config.batch_size,
-      learningRate: config.learningRate,
-      createdAt: new Date().toISOString(),
-      platform: platform,
-      status: 'generated',
+    try {
+      // Call backend AI service to generate notebook
+      const response = await fetch('/api/training/colab/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dataset_profile: {
+            name: 'training_data',
+            type: 'text',
+            label_type: config.task_type,
+          },
+          training_target: {
+            base_model: config.model?.hf_id || 'microsoft/phi-2',
+            method: config.method,
+            max_budget_usd: 10,
+          },
+          constraints: {
+            max_cost_usd: 10,
+            max_carbon_kg: 1,
+          }
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to generate notebook')
+      }
+
+      const result = await response.json()
+      const notebook = JSON.parse(result.notebook_json || '{}')
+      setNotebook(notebook)
+      setTab('notebook')
+      
+      // Add to history
+      const newHistoryItem: TrainingHistory = {
+        id: `finetune-${Date.now()}`,
+        modelName: config.model.name,
+        modelId: config.model.hf_id,
+        method: config.method,
+        taskType: config.task_type,
+        epochs: config.epochs,
+        batchSize: config.batch_size,
+        learningRate: config.learning_rate,
+        createdAt: new Date().toISOString(),
+        platform: platform,
+        status: 'generated',
+      }
+      setHistory(prev => [newHistoryItem, ...prev].slice(0, 50))
+      
+    } catch (error) {
+      console.error('Failed to generate AI notebook:', error)
+      // Fallback to local generation if backend fails
+      const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
+      setNotebook(nb)
+      setTab('notebook')
+    } finally {
+      setGenerating(false)
     }
-    setHistory(prev => [newHistoryItem, ...prev].slice(0, 50)) // Keep last 50 items
-    
-    setGenerating(false)
   }
 
   const handleDownload = () => {
@@ -1330,7 +1366,7 @@ export default function FineTuningPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <label className="text-sm text-neutral-300">Learning Rate</label>
-                    <span className="text-sm text-brand-400 font-mono">{config.learning_rate.toExponential(0)}</span>
+                    <span className="text-sm text-brand-400 font-mono">{(config.learning_rate ?? 2e-4).toExponential(0)}</span>
                   </div>
                   <input type="range" min={1e-5} max={1e-3} step={1e-5} value={config.learning_rate}
                     onChange={e => updateConfig('learning_rate', parseFloat(e.target.value))}
@@ -1914,7 +1950,7 @@ print(response)`}</pre>
                             <div className="flex items-center gap-2 mt-1">
                               <Badge className="bg-neutral-700/50 text-neutral-300 text-xs">Epochs: {item.epochs}</Badge>
                               <Badge className="bg-neutral-700/50 text-neutral-300 text-xs">Batch: {item.batchSize}</Badge>
-                              <Badge className="bg-neutral-700/50 text-neutral-300 text-xs">LR: {item.learningRate.toExponential(0)}</Badge>
+                              <Badge className="bg-neutral-700/50 text-neutral-300 text-xs">LR: {item.learningRate?.toExponential(0) ?? 'N/A'}</Badge>
                             </div>
                           </div>
                         </div>
