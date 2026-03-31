@@ -9,8 +9,18 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Database, BarChart3, ArrowRight, AlertTriangle, Shield,
-  HardDrive, Tag, Clock
+  HardDrive, Tag, Clock, FileCheck, ChevronRight, Upload
 } from 'lucide-react'
+import Link from 'next/link'
+import { cn } from '@/lib/utils'
+
+const STEPS = [
+  { id: 'input', label: 'Input', icon: Database },
+  { id: 'constraints', label: 'Constraints', icon: Shield },
+  { id: 'preferences', label: 'Preferences', icon: BarChart3 },
+  { id: 'review', label: 'Review', icon: FileCheck },
+  { id: 'results', label: 'Results', icon: BarChart3 },
+]
 
 export default function DesignInputPage() {
   const router = useRouter()
@@ -34,6 +44,8 @@ export default function DesignInputPage() {
     return null
   }
 
+  const currentStepIndex = 0
+
   const handleNext = () => {
     setConstraints({ objective, deployment })
     setDesignStep('constraints')
@@ -44,8 +56,31 @@ export default function DesignInputPage() {
     <DashboardLayout>
       <div className="p-8 min-h-screen">
         <div className="max-w-4xl mx-auto">
+          {/* Step Indicator */}
+          <div className="flex items-center justify-center gap-2 mb-8">
+            {STEPS.map((step, i) => {
+              const Icon = step.icon
+              const isActive = i === currentStepIndex
+              const isCompleted = i < currentStepIndex
+              return (
+                <div key={step.id} className="flex items-center">
+                  <button onClick={() => isCompleted && router.push(`/design/${step.id}`)}
+                    className={cn('flex items-center gap-2 px-4 py-2 rounded-full transition-all',
+                      isActive ? 'bg-brand-500 text-white' : isCompleted ? 'bg-brand-500/20 text-brand-400' : 'bg-neutral-800 text-neutral-500')}>
+                    <Icon className="w-4 h-4" />
+                    <span className="text-sm font-medium">{step.label}</span>
+                  </button>
+                  {i < STEPS.length - 1 && <ChevronRight className="w-4 h-4 text-neutral-600 mx-1" />}
+                </div>
+              )
+            })}
+          </div>
+
           {/* Header */}
           <div className="mb-8">
+            <div className="flex items-center gap-2 text-brand-400 text-xs font-mono tracking-widest uppercase mb-2">
+              <Database className="w-4 h-4" /><span>Step 1 of 5</span>
+            </div>
             <h1 className="text-3xl font-bold text-white mb-2">Design Input</h1>
             <p className="text-neutral-400">
               Review your dataset and configure design parameters
@@ -128,7 +163,7 @@ export default function DesignInputPage() {
                 <div className="space-y-2">
                   <label className="text-sm text-neutral-400">Primary Objective</label>
                   <select 
-                    className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white"
+                    className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white focus:ring-2 focus:ring-brand-500"
                     value={objective}
                     onChange={(e) => setObjective(e.target.value as Objective)}
                   >
@@ -141,7 +176,7 @@ export default function DesignInputPage() {
                 <div className="space-y-2">
                   <label className="text-sm text-neutral-400">Deployment Mode</label>
                   <select 
-                    className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white"
+                    className="w-full px-4 py-3 rounded-xl bg-neutral-800/50 border border-white/10 text-white focus:ring-2 focus:ring-brand-500"
                     value={deployment}
                     onChange={(e) => setDeployment(e.target.value as Deployment)}
                   >
@@ -165,7 +200,12 @@ export default function DesignInputPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-between">
+                <Link href="/datasets/new">
+                  <Button variant="outline" className="border-neutral-700">
+                    <Upload className="w-4 h-4 mr-2" />Change Dataset
+                  </Button>
+                </Link>
                 <Button
                   onClick={handleNext}
                   className="bg-gradient-to-r from-brand-500 to-brand-600"

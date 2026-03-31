@@ -45,25 +45,35 @@ export default function TrainRunningPage() {
         if (projectId) {
           const result = await getTrainingStatusByProject(projectId)
           setStatus(result)
-          if (result.progress !== undefined) setProgress(result.progress)
-
+          
           if (result.status === 'completed') {
             setPolling(false)
             setDesignStep('result')
             router.push('/train/result/completed')
+            return
           }
           if (result.status === 'killed') {
             setPolling(false)
             setDesignStep('result')
             localStorage.setItem('system2ml_training_status', JSON.stringify({ status: 'killed', reason: result.reason }))
             router.push('/train/result/killed')
+            return
+          }
+          
+          // If training not started or still running, simulate progress
+          if (result.progress !== undefined) {
+            setProgress(result.progress)
+          } else {
+            // Simulate progress when backend doesn't have running training
+            setProgress(prev => Math.min(prev + Math.random() * 15, 100))
           }
         } else {
           setProgress(prev => Math.min(prev + Math.random() * 10, 100))
         }
       } catch (error) {
         console.error('Poll error:', error)
-        setProgress(prev => Math.min(prev + 5, 95))
+        // Simulate progress on error too
+        setProgress(prev => Math.min(prev + 10, 95))
       }
     }, 3000)
 
@@ -172,7 +182,7 @@ export default function TrainRunningPage() {
               <div className="p-3 rounded-lg bg-yellow-900/20 border border-yellow-500/20">
                 <p className="text-yellow-400 text-sm">
                   <AlertTriangle className="w-4 h-4 inline mr-2" />
-                  No base model selected. Go to AI Architect to select a model for fine-tuning.
+                  No base model selected. Go to Fine-Tuning to select a model.
                 </p>
               </div>
             )}

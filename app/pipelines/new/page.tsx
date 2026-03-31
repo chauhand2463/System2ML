@@ -1,17 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Button } from '@/components/ui/button'
 import { fetchDesign } from '@/lib/api'
 import { DesignRequest } from '@/lib/api'
-import { Loader2, CheckCircle, AlertCircle, Zap } from 'lucide-react'
+import { Loader2, CheckCircle, AlertCircle, Zap, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
+
+interface SavedPipeline {
+  id: string
+  name: string
+  data: DesignRequest
+  createdAt: string
+}
+
+const STORAGE_KEY = 'system2ml_saved_pipelines'
 
 export default function NewPipelinePage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [savedPipelines, setSavedPipelines] = useState<SavedPipeline[]>([])
+  const [showSaved, setShowSaved] = useState(false)
   
   const [formData, setFormData] = useState<DesignRequest>({
     data_profile: { type: 'tabular' },
@@ -26,6 +38,68 @@ export default function NewPipelinePage() {
     retraining: 'drift',
     name: '',
   })
+
+  // Load saved pipelines from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        setSavedPipelines(JSON.parse(saved))
+      }
+    } catch (e) {
+      console.error('Error loading saved pipelines:', e)
+    }
+  }, [])
+
+  // Save to localStorage whenever form data changes (if name is set)
+  useEffect(() => {
+    if (formData.name) {
+      localStorage.setItem('system2ml_pipeline_form', JSON.stringify(formData))
+    }
+  }, [formData])
+
+  // Load form from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('system2ml_pipeline_form')
+      if (saved) {
+        setFormData(JSON.parse(saved))
+      }
+    } catch (e) {
+      console.error('Error loading form:', e)
+    }
+  }, [])
+
+  const savePipeline = () => {
+    if (!formData.name) return
+    const newPipeline: SavedPipeline = {
+      id: `pipeline-${Date.now()}`,
+      name: formData.name,
+      data: formData,
+      createdAt: new Date().toISOString(),
+    }
+    const updated = [newPipeline, ...savedPipelines].slice(0, 20) // Keep last 20
+    setSavedPipelines(updated)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+  }
+
+  const loadSavedPipeline = (pipeline: SavedPipeline) => {
+    setFormData(pipeline.data)
+    setShowSaved(false)
+  }
+
+  const deleteSavedPipeline = (id: string) => {
+    const updated = savedPipelines.filter(p => p.id !== id)
+    setSavedPipelines(updated)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+  }
+
+  const clearAllSaved = () => {
+    if (confirm('Clear all saved pipelines?')) {
+      setSavedPipelines([])
+      localStorage.removeItem(STORAGE_KEY)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,14 +121,46 @@ export default function NewPipelinePage() {
     <DashboardLayout>
       <div className="p-8 max-w-4xl mx-auto min-h-screen">
         {/* Header */}
-        <div className="mb-8">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm mb-4">
-            <Zap className="w-4 h-4" />
-            Create New Pipeline
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm mb-4">
+              <Zap className="w-4 h-4" />
+              Create New Pipeline
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-2">Design New Pipeline</h1>
+            <p className="text-neutral-400">Configure your ML pipeline with constraints</p>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Design New Pipeline</h1>
-          <p className="text-neutral-400">Configure your ML pipeline with constraints</p>
+          {savedPipelines.length > 0 && (
+            <Button variant="outline" onClick={() => setShowSaved(!showSaved)} className="border-neutral-700">
+              <Save className="w-4 h-4 mr-2" /> Saved ({savedPipelines.length})
+            </Button>
+          )}
         </div>
+
+        {/* Saved Pipelines */}
+        {showSaved && savedPipelines.length > 0 && (
+          <div className="mb-6 p-4 rounded-xl bg-neutral-900/50 border border-neutral-700">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-medium">Saved Pipelines</h3>
+              <button onClick={clearAllSaved} className="text-xs text-neutral-500 hover:text-red-400">
+                <Trash2 className="w-3 h-3" /> Clear All
+              </button>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {savedPipelines.map((pipeline) => (
+                <div key={pipeline.id} className="flex items-center justify-between p-3 rounded-lg bg-neutral-800 border border-neutral-700 hover:border-brand-500/30 transition-all">
+                  <div className="cursor-pointer flex-1" onClick={() => loadSavedPipeline(pipeline)}>
+                    <p className="text-white font-medium">{pipeline.name}</p>
+                    <p className="text-neutral-500 text-xs">{pipeline.data.data_profile.type} • {pipeline.data.objective}</p>
+                  </div>
+                  <button onClick={() => deleteSavedPipeline(pipeline.id)} className="p-2 text-neutral-500 hover:text-red-400">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Basic Info */}
@@ -215,18 +321,23 @@ export default function NewPipelinePage() {
           </div>
 
           {/* Submit */}
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white py-4 text-lg font-semibold shadow-lg shadow-brand-500/25"
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Zap className="w-5 h-5" />
-            )}
-            {loading ? 'Designing Pipeline...' : 'Design Pipeline'}
-          </Button>
+          <div className="flex gap-3">
+            <Button type="button" onClick={savePipeline} disabled={!formData.name} variant="outline" className="flex-1 border-neutral-700">
+              <Save className="w-4 h-4 mr-2" /> Save for Later
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white py-4 text-lg font-semibold shadow-lg shadow-brand-500/25"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Zap className="w-5 h-5" />
+              )}
+              {loading ? 'Designing Pipeline...' : 'Design Pipeline'}
+            </Button>
+          </div>
         </form>
 
         {/* Results */}

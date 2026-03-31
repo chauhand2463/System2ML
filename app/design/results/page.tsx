@@ -11,8 +11,9 @@ import { Button } from '@/components/ui/button'
 import { useWorkflow } from '@/hooks/use-workflow'
 import {
   Database, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle,
-  Shield, Zap, DollarSign, Leaf, Clock, Target, Check
+  Shield, Zap, DollarSign, Leaf, Clock, Target, Check, Trophy, Star
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export default function DesignResultsPage() {
   const router = useRouter()
@@ -25,6 +26,7 @@ export default function DesignResultsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [safetyValidated, setSafetyValidated] = useState(false)
   const [validating, setValidating] = useState(false)
+  const [sortBy, setSortBy] = useState<'cost' | 'carbon' | 'latency' | 'accuracy'>('accuracy')
 
   useEffect(() => {
     if (!canProceedToDesign()) {
@@ -50,6 +52,16 @@ export default function DesignResultsPage() {
 
   const selectedPipeline = pipelineCandidates.find(c => c.id === selectedId)
   const feasiblePipelines = pipelineCandidates.filter(c => c.isFeasible)
+  
+  const sortedCandidates = [...pipelineCandidates].sort((a, b) => {
+    switch (sortBy) {
+      case 'cost': return a.estimatedCost - b.estimatedCost
+      case 'carbon': return a.estimatedCarbon - b.estimatedCarbon
+      case 'latency': return a.estimatedLatencyMs - b.estimatedLatencyMs
+      case 'accuracy': return b.estimatedAccuracy - a.estimatedAccuracy
+      default: return 0
+    }
+  })
 
   const handleValidateAndSelect = async (candidate: PipelineCandidate) => {
     setSelectedId(candidate.id)
@@ -97,19 +109,22 @@ export default function DesignResultsPage() {
   return (
     <DashboardLayout>
       <div className="p-8 min-h-screen">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Pipeline Selection</h1>
+            <div className="flex items-center gap-2 text-brand-400 text-xs font-mono tracking-widest uppercase mb-2">
+              <Trophy className="w-4 h-4" /><span>Pipeline Selection</span>
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-2">Select Your Pipeline</h1>
             <p className="text-neutral-400">
-              Select a feasible pipeline to proceed to training
+              Choose a feasible pipeline that meets your constraints
             </p>
           </div>
 
           {/* Dataset Summary */}
           <Card className="bg-neutral-900/50 border-white/5 mb-6">
             <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-4">
                   <div className="p-2 rounded-lg bg-brand-500/20">
                     <Database className="w-5 h-5 text-brand-400" />
@@ -121,48 +136,72 @@ export default function DesignResultsPage() {
                     </p>
                   </div>
                 </div>
-                <Badge className="bg-emerald-500/20 text-emerald-400">
-                  {feasiblePipelines.length} Feasible
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                    {feasiblePipelines.length} Feasible
+                  </Badge>
+                  <Badge className="bg-neutral-700/20 text-neutral-400">
+                    {pipelineCandidates.length} Total
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* Sort Options */}
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-sm text-neutral-500">Sort by:</span>
+            {(['accuracy', 'cost', 'carbon', 'latency'] as const).map(sort => (
+              <button key={sort} onClick={() => setSortBy(sort)}
+                className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize',
+                  sortBy === sort ? 'bg-brand-500 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white')}>
+                {sort}
+              </button>
+            ))}
+          </div>
+
           {/* Pipeline Cards */}
           <div className="space-y-4">
-            {pipelineCandidates.map((candidate) => {
+            {sortedCandidates.map((candidate, idx) => {
               const isSelected = selectedId === candidate.id
               const isFeasible = candidate.isFeasible
+              const isTop = idx === 0 && isFeasible
 
               return (
                 <Card
                   key={candidate.id}
-                  className={`bg-neutral-900/50 border transition-all cursor-pointer ${isSelected
-                    ? 'border-brand-500 ring-1 ring-brand-500'
-                    : isFeasible
-                      ? 'border-neutral-700 hover:border-emerald-500/50'
-                      : 'border-red-500/20 opacity-60'
-                    }`}
+                  className={cn('bg-neutral-900/50 border transition-all cursor-pointer',
+                    isSelected ? 'border-brand-500 ring-2 ring-brand-500/30' : 
+                    isFeasible ? 'border-neutral-700 hover:border-emerald-500/50' : 'border-red-500/20 opacity-60'
+                  )}
                   onClick={() => isFeasible && handleValidateAndSelect(candidate)}
                 >
                   <CardContent className="pt-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
-                        <div className={`p-2 rounded-lg ${isFeasible ? 'bg-emerald-500/20' : 'bg-red-500/20'
-                          }`}>
-                          {isFeasible ? (
-                            <CheckCircle className="w-5 h-5 text-emerald-400" />
-                          ) : (
-                            <AlertTriangle className="w-5 h-5 text-red-400" />
+                        <div className="relative">
+                          <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center',
+                            isFeasible ? 'bg-emerald-500/20' : 'bg-red-500/20')}>
+                            {isFeasible ? (
+                              <CheckCircle className="w-6 h-6 text-emerald-400" />
+                            ) : (
+                              <AlertTriangle className="w-6 h-6 text-red-400" />
+                            )}
+                          </div>
+                          {isTop && (
+                            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center">
+                              <Star className="w-3 h-3 text-white" />
+                            </div>
                           )}
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-white">{candidate.name}</h3>
-                          <p className="text-neutral-400 text-sm">{candidate.description}</p>
-
-                          {/* Model Family Badge */}
-                          <div className="mt-2">
-                            <Badge className="bg-brand-500/20 text-brand-400">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-semibold text-white">{candidate.name}</h3>
+                            {isTop && <Badge className="bg-yellow-500/20 text-yellow-400 text-xs">Best Match</Badge>}
+                          </div>
+                          <p className="text-neutral-400 text-sm mb-2">{candidate.description}</p>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge className="bg-brand-500/20 text-brand-400 text-xs">
                               {candidate.modelFamily}
                             </Badge>
                           </div>
@@ -170,22 +209,41 @@ export default function DesignResultsPage() {
                       </div>
 
                       {/* Metrics */}
-                      <div className="grid grid-cols-4 gap-4 text-right">
+                      <div className="grid grid-cols-4 gap-6 text-right">
                         <div>
-                          <p className="text-xs text-neutral-500">Est. Cost</p>
-                          <p className="text-white font-medium">${candidate.estimatedCost}</p>
+                          <p className="text-xs text-neutral-500 flex items-center justify-end gap-1">
+                            <DollarSign className="w-3 h-3" />Cost
+                          </p>
+                          <p className={cn('text-lg font-bold',
+                            candidate.estimatedCost > constraints.maxCostUsd ? 'text-red-400' : 'text-white')}>
+                            ${candidate.estimatedCost}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-xs text-neutral-500">Est. Carbon</p>
-                          <p className="text-white font-medium">{candidate.estimatedCarbon}kg</p>
+                          <p className="text-xs text-neutral-500 flex items-center justify-end gap-1">
+                            <Leaf className="w-3 h-3" />Carbon
+                          </p>
+                          <p className={cn('text-lg font-bold',
+                            candidate.estimatedCarbon > constraints.maxCarbonKg ? 'text-red-400' : 'text-white')}>
+                            {candidate.estimatedCarbon}kg
+                          </p>
                         </div>
                         <div>
-                          <p className="text-xs text-neutral-500">Est. Latency</p>
-                          <p className="text-white font-medium">{candidate.estimatedLatencyMs}ms</p>
+                          <p className="text-xs text-neutral-500 flex items-center justify-end gap-1">
+                            <Clock className="w-3 h-3" />Latency
+                          </p>
+                          <p className={cn('text-lg font-bold',
+                            candidate.estimatedLatencyMs > constraints.maxLatencyMs ? 'text-red-400' : 'text-white')}>
+                            {candidate.estimatedLatencyMs}ms
+                          </p>
                         </div>
                         <div>
-                          <p className="text-xs text-neutral-500">Est. Accuracy</p>
-                          <p className="text-white font-medium">{(candidate.estimatedAccuracy * 100).toFixed(0)}%</p>
+                          <p className="text-xs text-neutral-500 flex items-center justify-end gap-1">
+                            <Target className="w-3 h-3" />Accuracy
+                          </p>
+                          <p className="text-lg font-bold text-emerald-400">
+                            {(candidate.estimatedAccuracy * 100).toFixed(1)}%
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -209,6 +267,16 @@ export default function DesignResultsPage() {
                         <div className="flex items-center gap-2 text-brand-400">
                           <Shield className="w-4 h-4" />
                           <span className="text-sm font-medium">Safety Gate Passed</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Validating state */}
+                    {isSelected && validating && (
+                      <div className="mt-4 pt-3 border-t border-brand-500/20">
+                        <div className="flex items-center gap-2 text-brand-400">
+                          <Shield className="w-4 h-4 animate-pulse" />
+                          <span className="text-sm">Validating safety constraints...</span>
                         </div>
                       </div>
                     )}

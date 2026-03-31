@@ -351,6 +351,13 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Persist projectId to localStorage whenever it changes
+  useEffect(() => {
+    if (projectId) {
+      localStorage.setItem('system2ml_project_id', projectId)
+    }
+  }, [projectId])
+
   return (
     <WorkflowContext.Provider
       value={{

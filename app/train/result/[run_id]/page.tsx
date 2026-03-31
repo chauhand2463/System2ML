@@ -24,10 +24,11 @@ export default function TrainResultPage({ params }: TrainResultPageProps) {
   const { dataset, constraints, selectedPipeline, trainingRun, setTrainingRun, resetDesign } = useDesign()
 
   const [loading, setLoading] = useState(true)
-  const [run, setRun] = useState<TrainingRun | null>(null)
   const [trainingStatus, setTrainingStatus] = useState<any>(null)
   const [deploying, setDeploying] = useState(false)
   const [deployedUrl, setDeployedUrl] = useState<string | null>(null)
+
+  const run = trainingRun
 
   // Computed values
   const finalCostPass = (run?.costSpent || 0) <= constraints.maxCostUsd

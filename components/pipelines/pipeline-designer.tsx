@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Trash2, Plus, Save, RotateCcw, Check, X, Settings, Zap, Database, Cpu, HardDrive, Activity, Layers, Workflow, ArrowRight } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Trash2, Plus, Save, RotateCcw, Check, X, Settings, Zap, Database, Cpu, HardDrive, Activity, Layers, Workflow, ArrowRight, Play, Pause, AlertTriangle, CheckCircle, Clock, GitBranch, FileCode, Template } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type NodeType = 
@@ -451,13 +452,124 @@ const POSITIONS: Record<NodeType, { x: number; y: number }> = {
   container: { x: 850, y: 450 },
 }
 
+interface PipelineTemplate {
+  id: string
+  name: string
+  description: string
+  icon: any
+  nodes: PipelineNode[]
+  edges: PipelineEdge[]
+}
+
+const PIPELINE_TEMPLATES: PipelineTemplate[] = [
+  {
+    id: 'tabular-classification',
+    name: 'Tabular Classification',
+    description: 'Classic ML classification pipeline',
+    icon: Cpu,
+    nodes: [
+      { id: 'source-1', name: 'Data Source', type: 'source', position: { x: 50, y: 150 }, config: { source_type: 'csv', path: '/data/train.csv' }, inputs: [], outputs: ['data'] },
+      { id: 'preprocess-1', name: 'Preprocessing', type: 'preprocessing', position: { x: 250, y: 150 }, config: { steps: ['clean', 'impute', 'encode'] }, inputs: ['data'], outputs: ['clean_data'] },
+      { id: 'split-1', name: 'Train/Test Split', type: 'splitter', position: { x: 450, y: 150 }, config: { split_type: 'train_test', ratio: 0.8 }, inputs: ['clean_data'], outputs: ['train_data', 'test_data'] },
+      { id: 'model-1', name: 'ML Model', type: 'model', position: { x: 650, y: 150 }, config: { model_type: 'random_forest', n_estimators: 100 }, inputs: ['train_data'], outputs: ['predictions', 'model'] },
+      { id: 'sink-1', name: 'Output', type: 'sink', position: { x: 850, y: 150 }, config: { output_type: 'csv', path: '/data/output.csv' }, inputs: ['predictions'], outputs: [] },
+    ],
+    edges: [
+      { id: 'e1', source: 'source-1', target: 'preprocess-1' },
+      { id: 'e2', source: 'preprocess-1', target: 'split-1' },
+      { id: 'e3', source: 'split-1', target: 'model-1' },
+      { id: 'e4', source: 'model-1', target: 'sink-1' },
+    ],
+  },
+  {
+    id: 'text-classification',
+    name: 'Text Classification',
+    description: 'NLP text classification with embeddings',
+    icon: FileCode,
+    nodes: [
+      { id: 'source-1', name: 'Data Source', type: 'source', position: { x: 50, y: 150 }, config: { source_type: 'csv', path: '/data/text.csv' }, inputs: [], outputs: ['data'] },
+      { id: 'preprocess-1', name: 'Preprocessing', type: 'preprocessing', position: { x: 250, y: 150 }, config: { steps: ['clean', 'encode'] }, inputs: ['data'], outputs: ['clean_data'] },
+      { id: 'embed-1', name: 'Embeddings', type: 'embeddings', position: { x: 450, y: 150 }, config: { model: 'text-embedding-3-small' }, inputs: ['clean_data'], outputs: ['embeddings'] },
+      { id: 'model-1', name: 'ML Model', type: 'model', position: { x: 650, y: 150 }, config: { model_type: 'logistic_regression' }, inputs: ['embeddings'], outputs: ['predictions', 'model'] },
+      { id: 'sink-1', name: 'Output', type: 'sink', position: { x: 850, y: 150 }, config: { output_type: 'json', path: '/data/output.json' }, inputs: ['predictions'], outputs: [] },
+    ],
+    edges: [
+      { id: 'e1', source: 'source-1', target: 'preprocess-1' },
+      { id: 'e2', source: 'preprocess-1', target: 'embed-1' },
+      { id: 'e3', source: 'embed-1', target: 'model-1' },
+      { id: 'e4', source: 'model-1', target: 'sink-1' },
+    ],
+  },
+  {
+    id: 'rag-pipeline',
+    name: 'RAG Pipeline',
+    description: 'Retrieval Augmented Generation',
+    icon: Workflow,
+    nodes: [
+      { id: 'source-1', name: 'Documents', type: 'source', position: { x: 50, y: 150 }, config: { source_type: 'json', path: '/data/docs.json' }, inputs: [], outputs: ['documents'] },
+      { id: 'embed-1', name: 'Embeddings', type: 'embeddings', position: { x: 250, y: 150 }, config: { model: 'text-embedding-3-small' }, inputs: ['documents'], outputs: ['embeddings'] },
+      { id: 'vector-1', name: 'Vector Store', type: 'vectorstore', position: { x: 450, y: 150 }, config: { provider: 'pinecone', index_name: 'docs' }, inputs: ['embeddings'], outputs: ['indexed_vectors'] },
+      { id: 'rag-1', name: 'RAG Pipeline', type: 'rag', position: { x: 650, y: 150 }, config: { chunk_size: 512, top_k: 5 }, inputs: ['documents', 'query'], outputs: ['context', 'response'] },
+      { id: 'api-1', name: 'API Endpoint', type: 'api', position: { x: 850, y: 150 }, config: { method: 'POST', path: '/rag' }, inputs: ['response'], outputs: ['api_endpoint'] },
+    ],
+    edges: [
+      { id: 'e1', source: 'source-1', target: 'embed-1' },
+      { id: 'e2', source: 'embed-1', target: 'vector-1' },
+      { id: 'e3', source: 'vector-1', target: 'rag-1' },
+      { id: 'e4', source: 'rag-1', target: 'api-1' },
+    ],
+  },
+  {
+    id: 'etl-pipeline',
+    name: 'ETL Pipeline',
+    description: 'Extract, Transform, Load workflow',
+    icon: Layers,
+    nodes: [
+      { id: 'source-1', name: 'Data Source', type: 'source', position: { x: 50, y: 150 }, config: { source_type: 'database' }, inputs: [], outputs: ['raw_data'] },
+      { id: 'validator-1', name: 'Validator', type: 'validator', position: { x: 250, y: 150 }, config: { checks: ['null_check', 'type_check'] }, inputs: ['raw_data'], outputs: ['validated_data', 'validation_report'] },
+      { id: 'transform-1', name: 'Transform', type: 'transform', position: { x: 450, y: 150 }, config: { operation: 'normalize' }, inputs: ['validated_data'], outputs: ['transformed_data'] },
+      { id: 'sink-1', name: 'Data Warehouse', type: 'sink', position: { x: 650, y: 150 }, config: { output_type: 'parquet', path: '/warehouse/output' }, inputs: ['transformed_data'], outputs: [] },
+      { id: 'monitor-1', name: 'Monitor', type: 'monitor', position: { x: 850, y: 150 }, config: { metrics: ['row_count', 'null_count'] }, inputs: ['transformed_data'], outputs: ['alerts'] },
+    ],
+    edges: [
+      { id: 'e1', source: 'source-1', target: 'validator-1' },
+      { id: 'e2', source: 'validator-1', target: 'transform-1' },
+      { id: 'e3', source: 'transform-1', target: 'sink-1' },
+      { id: 'e4', source: 'transform-1', target: 'monitor-1' },
+    ],
+  },
+  {
+    id: 'streaming-ml',
+    name: 'Streaming ML',
+    description: 'Real-time ML with streaming data',
+    icon: Activity,
+    nodes: [
+      { id: 'stream-1', name: 'Kafka Stream', type: 'streaming', position: { x: 50, y: 150 }, config: { stream_source: 'kafka', window_size: '5m' }, inputs: ['stream_data'], outputs: ['processed_stream'] },
+      { id: 'preprocess-1', name: 'Preprocessing', type: 'preprocessing', position: { x: 250, y: 150 }, config: { steps: ['clean'] }, inputs: ['processed_stream'], outputs: ['clean_data'] },
+      { id: 'model-1', name: 'ML Model', type: 'model', position: { x: 450, y: 150 }, config: { model_type: 'xgboost' }, inputs: ['clean_data'], outputs: ['predictions'] },
+      { id: 'sink-1', name: 'Output', type: 'sink', position: { x: 650, y: 150 }, config: { output_type: 'database' }, inputs: ['predictions'], outputs: [] },
+      { id: 'monitor-1', name: 'Monitor', type: 'monitor', position: { x: 850, y: 150 }, config: { metrics: ['accuracy'], alert_on_drift: true }, inputs: ['predictions'], outputs: ['alerts'] },
+    ],
+    edges: [
+      { id: 'e1', source: 'stream-1', target: 'preprocess-1' },
+      { id: 'e2', source: 'preprocess-1', target: 'model-1' },
+      { id: 'e3', source: 'model-1', target: 'sink-1' },
+      { id: 'e4', source: 'model-1', target: 'monitor-1' },
+    ],
+  },
+]
+
 export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave }: PipelineDesignerProps) {
   const [nodes, setNodes] = useState<PipelineNode[]>([])
   const [edges, setEdges] = useState<PipelineEdge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [showAddMenu, setShowAddMenu] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [showValidation, setShowValidation] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [pipelineName, setPipelineName] = useState('My Pipeline')
+  const [pipelineDescription, setPipelineDescription] = useState('')
 
   useEffect(() => {
     setMounted(true)
@@ -471,6 +583,83 @@ export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave 
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId)
   const editingNode = nodes.find(n => n.id === editingNodeId)
+
+  const applyTemplate = useCallback((template: PipelineTemplate) => {
+    const idMap: Record<string, string> = {}
+    const newNodes = template.nodes.map(node => {
+      const newId = generateId()
+      idMap[node.id] = newId
+      return { ...node, id: newId, position: { ...node.position } }
+    })
+    const newEdges = template.edges.map(edge => ({
+      ...edge,
+      id: generateId(),
+      source: idMap[edge.source],
+      target: idMap[edge.target],
+    }))
+    setNodes(newNodes)
+    setEdges(newEdges)
+    setPipelineName(template.name)
+    setPipelineDescription(template.description)
+    setShowTemplates(false)
+  }, [])
+
+  const validatePipeline = useCallback(() => {
+    const issues: string[] = []
+    const sourceNodes = nodes.filter(n => n.type === 'source')
+    const sinkNodes = nodes.filter(n => n.type === 'sink')
+    
+    if (sourceNodes.length === 0) issues.push('Pipeline needs at least one data source')
+    if (sinkNodes.length === 0) issues.push('Pipeline needs at least one output sink')
+    
+    const orphanNodes = nodes.filter(n => {
+      const hasInput = edges.some(e => e.target === n.id)
+      const hasOutput = edges.some(e => e.source === n.id)
+      return n.type !== 'source' && !hasInput
+    })
+    if (orphanNodes.length > 0) issues.push(`${orphanNodes.length} node(s) are not connected`)
+    
+    const cycles = detectCycles(nodes, edges)
+    if (cycles) issues.push('Pipeline contains circular dependencies')
+    
+    return issues
+  }, [nodes, edges])
+
+  const detectCycles = (nodes: PipelineNode[], edges: PipelineEdge[]): boolean => {
+    const adj: Record<string, string[]> = {}
+    nodes.forEach(n => adj[n.id] = [])
+    edges.forEach(e => { if (adj[e.source]) adj[e.source].push(e.target) })
+    
+    const visited = new Set<string>()
+    const recStack = new Set<string>()
+    
+    const dfs = (nodeId: string): boolean => {
+      visited.add(nodeId)
+      recStack.add(nodeId)
+      for (const neighbor of adj[nodeId] || []) {
+        if (!visited.has(neighbor) && dfs(neighbor)) return true
+        if (recStack.has(neighbor)) return true
+      }
+      recStack.delete(nodeId)
+      return false
+    }
+    
+    for (const node of nodes) {
+      if (!visited.has(node.id) && dfs(node.id)) return true
+    }
+    return false
+  }
+
+  const getNodeStats = useCallback(() => {
+    return {
+      total: nodes.length,
+      sources: nodes.filter(n => n.type === 'source').length,
+      transforms: nodes.filter(n => ['transform', 'preprocessing', 'feature_engineering'].includes(n.type)).length,
+      models: nodes.filter(n => n.type === 'model').length,
+      sinks: nodes.filter(n => n.type === 'sink').length,
+      monitors: nodes.filter(n => n.type === 'monitor').length,
+    }
+  }, [nodes])
 
   const addNode = useCallback((type: NodeType) => {
     const template = NODE_TEMPLATES[type]
@@ -503,9 +692,49 @@ export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave 
   }, [selectedNodeId])
 
   const handleSave = useCallback(() => {
+    const issues = validatePipeline()
+    if (issues.length > 0) {
+      const proceed = confirm(`Pipeline has ${issues.length} issue(s):\n${issues.join('\n')}\n\nSave anyway?`)
+      if (!proceed) return
+    }
     if (onSave) onSave(nodes, edges)
-    alert('Pipeline saved successfully!')
-  }, [nodes, edges, onSave])
+    alert(`Pipeline "${pipelineName}" saved successfully!`)
+  }, [nodes, edges, onSave, pipelineName, validatePipeline])
+
+  const exportPipeline = useCallback(() => {
+    const pipeline = { name: pipelineName, description: pipelineDescription, nodes, edges }
+    const blob = new Blob([JSON.stringify(pipeline, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${pipelineName.toLowerCase().replace(/\s+/g, '-')}.json`
+    a.click()
+  }, [nodes, edges, pipelineName, pipelineDescription])
+
+  const importPipeline = useCallback(() => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target?.result as string)
+            setNodes(data.nodes || [])
+            setEdges(data.edges || [])
+            setPipelineName(data.name || 'Imported Pipeline')
+            setPipelineDescription(data.description || '')
+          } catch {
+            alert('Invalid pipeline file')
+          }
+        }
+        reader.readAsText(file)
+      }
+    }
+    input.click()
+  }, [])
 
   const resetPipeline = useCallback(() => {
     if (confirm('Reset pipeline? All nodes will be removed.')) {
@@ -604,30 +833,35 @@ export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave 
   return (
     <div className="flex h-full gap-6">
       {/* Canvas Area */}
-      <div className="flex-1 rounded-2xl border border-neutral-800 bg-neutral-900/50 backdrop-blur-xl p-4 overflow-hidden relative">
+      <div className="flex-1 rounded-2xl border border-neutral-800 bg-neutral-900/50 backdrop-blur-xl p-4 overflow-hidden flex flex-col">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setShowAddMenu(!showAddMenu)} className="border-neutral-700 bg-neutral-800/80">
-              <Plus className="w-4 h-4 mr-2" /> Add Node
-            </Button>
-            
-            {showAddMenu && (
-              <div className="absolute top-12 left-0 bg-neutral-800 border border-neutral-700 rounded-xl p-2 shadow-xl z-20 w-64">
-                {(Object.entries(NODE_TEMPLATES) as [NodeType, NodeTemplate][]).map(([type, template]) => (
-                  <button key={type} onClick={() => addNode(type)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-neutral-700 text-left">
-                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", template.color.split(' ')[0])}>
-                      <template.icon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-white text-sm">{template.label}</div>
-                      <div className="text-neutral-500 text-xs">{template.description}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+            <input 
+              type="text" 
+              value={pipelineName} 
+              onChange={(e) => setPipelineName(e.target.value)}
+              className="bg-transparent text-white font-bold text-lg border-none focus:outline-none focus:ring-0"
+              placeholder="Pipeline Name"
+            />
           </div>
           
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setShowTemplates(!showTemplates)} className="border-neutral-700 bg-neutral-800/80">
+              <Template className="w-4 h-4 mr-2" /> Templates
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowValidation(!showValidation)} className="border-neutral-700 bg-neutral-800/80">
+              <CheckCircle className="w-4 h-4 mr-2" /> Validate
+            </Button>
+            <Button size="sm" variant="outline" onClick={importPipeline} className="border-neutral-700 bg-neutral-800/80">
+              <Save className="w-4 h-4 mr-2" /> Import
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportPipeline} className="border-neutral-700 bg-neutral-800/80">
+              <Save className="w-4 h-4 mr-2" /> Export
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowAddMenu(!showAddMenu)} className="border-neutral-700 bg-neutral-800/80">
+              <Plus className="w-4 h-4 mr-2" /> Add Node
+            </Button>
             <Button size="sm" variant="outline" onClick={resetPipeline} className="border-neutral-700">
               <RotateCcw className="w-4 h-4 mr-2" /> Reset
             </Button>
@@ -637,8 +871,91 @@ export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave 
           </div>
         </div>
 
+        {/* Templates Dropdown */}
+        {showTemplates && (
+          <div className="mb-4 p-4 rounded-xl bg-neutral-800/80 border border-neutral-700">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-white font-medium flex items-center gap-2">
+                <Template className="w-4 h-4" /> Pipeline Templates
+              </h4>
+              <button onClick={() => setShowTemplates(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {PIPELINE_TEMPLATES.map(template => {
+                const Icon = template.icon
+                return (
+                  <button key={template.id} onClick={() => applyTemplate(template)}
+                    className="p-4 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-brand-500 text-left transition-all">
+                    <Icon className="w-6 h-6 text-brand-400 mb-2" />
+                    <p className="text-white text-sm font-medium">{template.name}</p>
+                    <p className="text-neutral-500 text-xs mt-1">{template.description}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Validation Results */}
+        {showValidation && (
+          <div className="mb-4 p-4 rounded-xl bg-neutral-800/80 border border-neutral-700">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-white font-medium flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" /> Validation Results
+              </h4>
+              <button onClick={() => setShowValidation(false)}><X className="w-4 h-4 text-neutral-400" /></button>
+            </div>
+            {(() => {
+              const issues = validatePipeline()
+              const stats = getNodeStats()
+              return (
+                <div className="space-y-3">
+                  <div className="flex gap-4 text-sm">
+                    <Badge className="bg-blue-500/20 text-blue-400">{stats.sources} Sources</Badge>
+                    <Badge className="bg-purple-500/20 text-purple-400">{stats.transforms} Transforms</Badge>
+                    <Badge className="bg-brand-500/20 text-brand-400">{stats.models} Models</Badge>
+                    <Badge className="bg-emerald-500/20 text-emerald-400">{stats.sinks} Sinks</Badge>
+                  </div>
+                  {issues.length === 0 ? (
+                    <div className="flex items-center gap-2 text-emerald-400">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Pipeline is valid! Ready to run.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {issues.map((issue, i) => (
+                        <div key={i} className="flex items-center gap-2 text-amber-400 text-sm">
+                          <AlertTriangle className="w-4 h-4" />
+                          {issue}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {/* Dropdowns */}
+        {showAddMenu && (
+          <div className="absolute top-40 left-4 bg-neutral-800 border border-neutral-700 rounded-xl p-2 shadow-xl z-20 w-64 max-h-96 overflow-y-auto">
+            {(Object.entries(NODE_TEMPLATES) as [NodeType, NodeTemplate][]).map(([type, template]) => (
+              <button key={type} onClick={() => addNode(type)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-neutral-700 text-left">
+                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", template.color.split(' ')[0])}>
+                  <template.icon className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-white text-sm">{template.label}</div>
+                  <div className="text-neutral-500 text-xs">{template.description}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        
         {/* Canvas */}
-        <div className="relative w-full h-full bg-neutral-950 rounded-xl border border-dashed border-neutral-800 mt-12 overflow-auto">
+        <div className="relative flex-1 bg-neutral-950 rounded-xl border border-dashed border-neutral-800 overflow-auto">
           {nodes.length === 0 ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">

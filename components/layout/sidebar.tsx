@@ -65,7 +65,6 @@ function SidebarComponent() {
     { label: 'Pipelines', href: '/pipelines', icon: Zap, color: 'text-brand-400' },
     { label: 'Runs', href: '/runs', icon: Activity, color: 'text-emerald-400' },
     { label: 'Failures', href: '/failures', icon: AlertCircle, color: 'text-red-400' },
-    { label: 'AI Architect', href: '/design/ai-architect', icon: Sparkles, color: 'text-cyan-400' },
     { label: 'Fine-Tuning', href: '/finetuning', icon: FlaskConical, color: 'text-pink-400' },
     { label: 'Approvals', href: '/approvals', icon: CheckCircle2, color: 'text-green-400' },
   ]

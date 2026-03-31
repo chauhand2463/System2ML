@@ -1,8 +1,13 @@
 """Airflow DAG templates for pipeline orchestration"""
 from datetime import datetime
 
+# Local logger
+from system2ml.logger import logger
+
+
 
 def create_tabular_dag(pipeline_id: str, config: dict) -> str:
+    logger.info("Generating Airflow DAG for pipeline %s", pipeline_id)
     dag_id = f"system2ml_{pipeline_id}"
     
     dag_template = f"""

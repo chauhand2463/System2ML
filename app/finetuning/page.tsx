@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import {
   Brain, Cpu, Zap, Download, ExternalLink, ChevronDown, ChevronUp,
   CheckCircle, AlertTriangle, Loader2, Play, FileText, Settings,
   Database, BarChart3, Layers, Terminal, Sparkles, Info, Copy,
-  Check, Upload, RefreshCw, Globe, BookOpen, Code2, FlaskConical
+  Check, Upload, RefreshCw, Globe, BookOpen, Code2, FlaskConical,
+  Gauge, Save, FolderOpen, Trash2, Wand2, TrendingUp, Activity
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -18,6 +20,7 @@ interface ModelConfig {
   id: string
   name: string
   hf_id: string
+  ollama_id?: string
   family: string
   params: string
   vram_gb: number
@@ -32,10 +35,13 @@ interface ModelConfig {
 }
 
 interface TrainingConfig {
+  use_ollama: boolean
   model: ModelConfig | null
   method: 'lora' | 'qlora' | 'full_ft'
   task_type: 'causal_lm' | 'seq2seq' | 'classification' | 'regression'
   dataset_format: 'alpaca' | 'sharegpt' | 'raw_text' | 'csv' | 'jsonl'
+  dataset_url: string
+  dataset_preview: any[]
   epochs: number
   batch_size: number
   learning_rate: number
@@ -60,10 +66,29 @@ interface TrainingConfig {
   gradient_accumulation_steps: number
   weight_decay: number
   max_grad_norm: number
+  use_dpo: boolean
+  dpo_beta: number
+  packed: boolean
+  neftune_noise_alpha: number
+  flash_attention: boolean
 }
 
 type Platform = 'colab' | 'jupyter' | 'runpod' | 'kaggle' | 'local'
-type Tab = 'models' | 'config' | 'notebook' | 'deploy'
+type Tab = 'models' | 'config' | 'notebook' | 'deploy' | 'performance' | 'history'
+
+interface TrainingHistory {
+  id: string
+  modelName: string
+  modelId: string
+  method: string
+  taskType: string
+  epochs: number
+  batchSize: number
+  learningRate: number
+  createdAt: string
+  platform: string
+  status: 'generated' | 'downloaded' | 'deployed'
+}
 
 // ─── Model Registry ───────────────────────────────────────────────────────────
 
@@ -85,6 +110,30 @@ const MODEL_REGISTRY: ModelConfig[] = [
     description: 'Flagship open model. Near GPT-4 quality. Needs A100 80GB or 2xA40.',
     use_cases: ['Complex reasoning', 'Advanced RAG', 'Summarization']
   },
+  {
+    id: 'llama-3.1-405b', name: 'Llama 3.1 405B', hf_id: 'meta-llama/Meta-Llama-3.1-405B-Instruct',
+    family: 'Llama 3', params: '405B', vram_gb: 800, context_length: 131072,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['flagship', 'most powerful', 'instruction'], license: 'Llama 3',
+    description: 'The largest Llama 3 model. Requires multi-GPU setup.',
+    use_cases: ['Complex reasoning', 'Code generation', 'Advanced RAG']
+  },
+  {
+    id: 'llama-3.2-1b', name: 'Llama 3.2 1B', hf_id: 'meta-llama/Llama-3.2-1B-Instruct',
+    family: 'Llama 3', params: '1B', vram_gb: 2, context_length: 128000,
+    supports_lora: true, supports_qlora: true, supports_full_ft: true,
+    tags: ['tiny', 'edge', 'fast'], license: 'Llama 3',
+    description: 'Ultra-lightweight Llama for edge devices. Runs on CPU.',
+    use_cases: ['Edge deployment', 'Mobile', 'Quick prototyping']
+  },
+  {
+    id: 'llama-3.2-3b', name: 'Llama 3.2 3B', hf_id: 'meta-llama/Llama-3.2-3B-Instruct',
+    family: 'Llama 3', params: '3B', vram_gb: 6, context_length: 128000,
+    supports_lora: true, supports_qlora: true, supports_full_ft: true,
+    tags: ['small', 'efficient', 'instruction'], license: 'Llama 3',
+    description: 'Lightweight but capable. Great balance of size and performance.',
+    use_cases: ['Chatbot', 'Edge', 'Mobile apps']
+  },
   // Mistral family
   {
     id: 'mistral-7b', name: 'Mistral 7B v0.3', hf_id: 'mistralai/Mistral-7B-Instruct-v0.3',
@@ -102,7 +151,31 @@ const MODEL_REGISTRY: ModelConfig[] = [
     description: 'Mixture-of-Experts. Activates only 12.9B params per token. Extremely capable.',
     use_cases: ['Complex tasks', 'Multilingual', 'Code generation']
   },
+  {
+    id: 'mixtral-8x22b', name: 'Mixtral 8x22B MoE', hf_id: 'mistralai/Mixtral-8x22B-Instruct-v0.1',
+    family: 'Mistral', params: '141B (MoE)', vram_gb: 160, context_length: 65536,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['moe', 'large', 'powerful'], license: 'Apache 2.0',
+    description: 'Larger Mixtral model. Excellent reasoning capabilities.',
+    use_cases: ['Complex reasoning', 'Advanced coding', 'Large context tasks']
+  },
   // Qwen family
+  {
+    id: 'qwen2.5-0.5b', name: 'Qwen 2.5 0.5B', hf_id: 'Qwen/Qwen2.5-0.5B-Instruct',
+    family: 'Qwen', params: '0.5B', vram_gb: 1, context_length: 32768,
+    supports_lora: true, supports_qlora: true, supports_full_ft: true,
+    tags: ['tiny', 'edge', 'fast'], license: 'Apache 2.0',
+    description: 'Tiny Qwen model for edge devices.',
+    use_cases: ['Edge', 'Mobile', 'Prototyping']
+  },
+  {
+    id: 'qwen2.5-1.5b', name: 'Qwen 2.5 1.5B', hf_id: 'Qwen/Qwen2.5-1.5B-Instruct',
+    family: 'Qwen', params: '1.5B', vram_gb: 3, context_length: 32768,
+    supports_lora: true, supports_qlora: true, supports_full_ft: true,
+    tags: ['small', 'efficient', 'instruction'], license: 'Apache 2.0',
+    description: 'Small but powerful. Great for resource-constrained environments.',
+    use_cases: ['Edge', 'Mobile', 'Quick tasks']
+  },
   {
     id: 'qwen2.5-7b', name: 'Qwen 2.5 7B', hf_id: 'Qwen/Qwen2.5-7B-Instruct',
     family: 'Qwen', params: '7B', vram_gb: 14, context_length: 131072,
@@ -119,6 +192,22 @@ const MODEL_REGISTRY: ModelConfig[] = [
     description: 'Outperforms many 70B models on code/math benchmarks.',
     use_cases: ['Advanced code', 'Mathematical reasoning', 'Long context']
   },
+  {
+    id: 'qwen2.5-32b', name: 'Qwen 2.5 32B', hf_id: 'Qwen/Qwen2.5-32B-Instruct',
+    family: 'Qwen', params: '32B', vram_gb: 64, context_length: 131072,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['powerful', 'code', 'reasoning'], license: 'Apache 2.0',
+    description: 'High-performance model for complex tasks.',
+    use_cases: ['Code generation', 'Math', 'Advanced reasoning']
+  },
+  {
+    id: 'qwen2.5-72b', name: 'Qwen 2.5 72B', hf_id: 'Qwen/Qwen2.5-72B-Instruct',
+    family: 'Qwen', params: '72B', vram_gb: 144, context_length: 131072,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['flagship', 'powerful', 'reasoning'], license: 'Apache 2.0',
+    description: 'Flagship Qwen model. Excellent all-around performance.',
+    use_cases: ['Complex reasoning', 'Code generation', 'RAG']
+  },
   // Phi family
   {
     id: 'phi-3.5-mini', name: 'Phi-3.5 Mini', hf_id: 'microsoft/Phi-3.5-mini-instruct',
@@ -128,7 +217,31 @@ const MODEL_REGISTRY: ModelConfig[] = [
     description: 'Microsoft\'s tiny powerhouse. Runs on consumer GPUs (8GB VRAM).',
     use_cases: ['Edge deployment', 'Mobile', 'Low-latency', 'Prototyping']
   },
+  {
+    id: 'phi-3.5-moe', name: 'Phi-3.5 MoE', hf_id: 'microsoft/Phi-3.5-moE-instruct',
+    family: 'Phi', params: '6.6B (MoE)', vram_gb: 12, context_length: 128000,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['moe', 'efficient', 'microsoft'], license: 'MIT',
+    description: 'Mixture of Experts from Microsoft. Great efficiency.',
+    use_cases: ['Edge', 'Mobile', 'Quick inference']
+  },
+  {
+    id: 'phi-4', name: 'Phi-4', hf_id: 'microsoft/phi-4',
+    family: 'Phi', params: '14B', vram_gb: 28, context_length: 16384,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['microsoft', 'instruction', 'reasoning'], license: 'MIT',
+    description: 'Latest Phi model with improved reasoning.',
+    use_cases: ['Reasoning', 'Instruction following', 'Code']
+  },
   // Gemma family
+  {
+    id: 'gemma-2-2b', name: 'Gemma 2 2B', hf_id: 'google/gemma-2-2b-it',
+    family: 'Gemma', params: '2B', vram_gb: 4, context_length: 8192,
+    supports_lora: true, supports_qlora: true, supports_full_ft: true,
+    tags: ['tiny', 'google', 'efficient'], license: 'Gemma Terms',
+    description: 'Compact Gemma model from Google.',
+    use_cases: ['Edge', 'Mobile', 'Quick tasks']
+  },
   {
     id: 'gemma-2-9b', name: 'Gemma 2 9B', hf_id: 'google/gemma-2-9b-it',
     family: 'Gemma', params: '9B', vram_gb: 18, context_length: 8192,
@@ -136,6 +249,14 @@ const MODEL_REGISTRY: ModelConfig[] = [
     tags: ['google', 'instruction', 'safety'], license: 'Gemma Terms',
     description: 'Google\'s open model with strong safety alignment. Great general-purpose model.',
     use_cases: ['Safe deployment', 'Consumer apps', 'Summarization']
+  },
+  {
+    id: 'gemma-2-27b', name: 'Gemma 2 27B', hf_id: 'google/gemma-2-27b-it',
+    family: 'Gemma', params: '27B', vram_gb: 54, context_length: 8192,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['google', 'powerful', 'instruction'], license: 'Gemma Terms',
+    description: 'Large Gemma model with strong capabilities.',
+    use_cases: ['Complex tasks', 'Reasoning', 'Code']
   },
   // Code models
   {
@@ -147,12 +268,36 @@ const MODEL_REGISTRY: ModelConfig[] = [
     use_cases: ['Code generation', 'Code review', 'Debugging', 'Documentation']
   },
   {
+    id: 'deepseek-coder-33b', name: 'DeepSeek Coder 33B', hf_id: 'deepseek-ai/deepseek-coder-33b-instruct',
+    family: 'DeepSeek', params: '33B', vram_gb: 66, context_length: 16384,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['code', 'powerful', 'programming'], license: 'DeepSeek License',
+    description: 'Large code generation model. Excellent for complex code tasks.',
+    use_cases: ['Code generation', 'Code review', 'Advanced debugging']
+  },
+  {
+    id: 'deepseek-v3', name: 'DeepSeek V3', hf_id: 'deepseek-ai/DeepSeek-V3',
+    family: 'DeepSeek', params: '671B (MoE)', vram_gb: 800, context_length: 128000,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['flagship', 'moe', 'reasoning'], license: 'DeepSeek License',
+    description: 'Latest DeepSeek model with advanced reasoning.',
+    use_cases: ['Complex reasoning', 'Code generation', 'Math']
+  },
+  {
     id: 'codellama-7b', name: 'Code Llama 7B', hf_id: 'meta-llama/CodeLlama-7b-Instruct-hf',
     family: 'Llama', params: '7B', vram_gb: 14, context_length: 16384,
     supports_lora: true, supports_qlora: true, supports_full_ft: false,
     tags: ['code', 'llama', 'infilling'], license: 'Llama 2',
     description: 'Meta\'s code-specialized model. Supports infilling and 80+ languages.',
     use_cases: ['Code completion', 'Code explanation', 'Bug fixing']
+  },
+  {
+    id: 'codellama-70b', name: 'Code Llama 70B', hf_id: 'meta-llama/CodeLlama-70b-Instruct-hf',
+    family: 'Llama', params: '70B', vram_gb: 140, context_length: 16384,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['code', 'powerful', 'llama'], license: 'Llama 2',
+    description: 'Large Code Llama for complex code tasks.',
+    use_cases: ['Code generation', 'Code review', 'Infilling']
   },
   // Specialized
   {
@@ -163,21 +308,81 @@ const MODEL_REGISTRY: ModelConfig[] = [
     description: 'TII\'s fully open-source model. No restrictions, fully commercial.',
     use_cases: ['Commercial products', 'Customer service', 'Content']
   },
+  {
+    id: 'falcon-mamba-7b', name: 'Falcon Mamba 7B', hf_id: 'tiiuae/falcon-mamba-7b-instruct',
+    family: 'Falcon', params: '7B', vram_gb: 14, context_length: 8192,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['mamba', 'ssm', 'fast'], license: 'Apache 2.0',
+    description: 'State Space Model architecture. Great for long contexts.',
+    use_cases: ['Long context', 'Reasoning', 'Code']
+  },
+  // Yi family
+  {
+    id: 'yi-1.5-6b', name: 'Yi 1.5 6B', hf_id: '01-ai/Yi-1.5-6B-Instruct',
+    family: 'Yi', params: '6B', vram_gb: 12, context_length: 4096,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['yi', 'instruction', 'efficient'], license: 'Apache 2.0',
+    description: 'Yi 1.5 series. Good performance for size.',
+    use_cases: ['Chat', 'Instruction following']
+  },
+  {
+    id: 'yi-1.5-34b', name: 'Yi 1.5 34B', hf_id: '01-ai/Yi-1.5-34B-Instruct',
+    family: 'Yi', params: '34B', vram_gb: 68, context_length: 4096,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['yi', 'powerful', 'instruction'], license: 'Apache 2.0',
+    description: 'Large Yi model with strong performance.',
+    use_cases: ['Complex tasks', 'Reasoning', 'Chat']
+  },
+  // GLM family
+  {
+    id: 'glm-4-9b', name: 'GLM-4-9B', hf_id: 'THUDM/glm-4-9b-chat',
+    family: 'GLM', params: '9B', vram_gb: 18, context_length: 131072,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['glm', 'instruction', 'long ctx'], license: 'GLM License',
+    description: 'Zhipu AI\'s model with long context support.',
+    use_cases: ['Long context', 'Chat', 'RAG']
+  },
+  {
+    id: 'glm-4-72b', name: 'GLM-4-72B', hf_id: 'THUDM/glm-4-72b-chat',
+    family: 'GLM', params: '72B', vram_gb: 144, context_length: 131072,
+    supports_lora: true, supports_qlora: true, supports_full_ft: false,
+    tags: ['glm', 'flagship', 'long ctx'], license: 'GLM License',
+    description: 'Flagship GLM model with 128K context.',
+    use_cases: ['Long context', 'Complex reasoning', 'RAG']
+  },
+  // Stable LM
+  {
+    id: 'stable-lm-3b', name: 'Stable LM 3B', hf_id: 'stabilityai/stableLM-3b-4e1t-instruct',
+    family: 'Stable', params: '3B', vram_gb: 6, context_length: 4096,
+    supports_lora: true, supports_qlora: true, supports_full_ft: true,
+    tags: ['stable', 'efficient', 'instruction'], license: 'Apache 2.0',
+    description: 'Stability AI\'s efficient instruction model.',
+    use_cases: ['Edge', 'Mobile', 'Quick tasks']
+  },
+  {
+    id: 'stable-zephyr-3b', name: 'Stable Zephyr 3B', hf_id: 'stabilityai/stable-zephyr-3b-dpo',
+    family: 'Stable', params: '3B', vram_gb: 6, context_length: 4096,
+    supports_lora: true, supports_qlora: true, supports_full_ft: true,
+    tags: ['stable', 'dpo', 'chat'], license: 'Apache 2.0',
+    description: 'Direct Preference Optimization model from Stability.',
+    use_cases: ['Chat', 'Instruction following']
+  },
 ]
 
-const FAMILIES = ['All', 'Llama 3', 'Mistral', 'Qwen', 'Phi', 'Gemma', 'DeepSeek', 'Llama', 'Falcon']
+const FAMILIES = ['All', 'Llama 3', 'Mistral', 'Qwen', 'Phi', 'Gemma', 'DeepSeek', 'Llama', 'Falcon', 'Yi', 'GLM', 'Stable']
 
 // ─── Notebook Generators ──────────────────────────────────────────────────────
 
 function generateColabNotebook(config: TrainingConfig): object {
-  const { model, method, task_type, dataset_format, epochs, batch_size,
+  const { model, method, task_type, dataset_format, dataset_url, epochs, batch_size,
     learning_rate, max_seq_length, lora_r, lora_alpha, lora_dropout,
     lora_target_modules, warmup_ratio, lr_scheduler, fp16, bf16,
     gradient_checkpointing, save_steps, eval_steps, output_dir,
     push_to_hub, hub_model_id, use_wandb, wandb_project,
-    quantization_bits, gradient_accumulation_steps, weight_decay, max_grad_norm } = config
+    quantization_bits, gradient_accumulation_steps, weight_decay, max_grad_norm,
+    use_dpo, dpo_beta, packed, neftune_noise_alpha, flash_attention } = config
 
-  const modelId = model?.hf_id || 'meta-llama/Meta-Llama-3.1-8B-Instruct'
+  const modelId = config.use_ollama ? (config.model?.ollama_id || config.model?.hf_id) : (config.model?.hf_id || 'meta-llama/Meta-Llama-3.1-8B-Instruct');
   const isQLoRA = method === 'qlora'
   const isLoRA = method === 'lora' || method === 'qlora'
 
@@ -275,7 +480,15 @@ function generateColabNotebook(config: TrainingConfig): object {
         `GRAD_ACCUM = ${gradient_accumulation_steps}  # @param {type:"number"}\n`,
         `LEARNING_RATE = ${learning_rate}  # @param {type:"number"}\n`,
         `MAX_SEQ_LENGTH = ${max_seq_length}  # @param {type:"number"}\n`,
-        `OUTPUT_DIR = "${output_dir}"  # @param {type:"string"}\n\n`,
+        `OUTPUT_DIR = "${output_dir}"  # @param {type:"string"}\n`,
+        `\n# Advanced Options\n`,
+        `FLASH_ATTENTION = ${flash_attention}  # @param {type:"boolean"}\n`,
+        `GRADIENT_CHECKPOINTING = ${gradient_checkpointing}  # @param {type:"boolean"}\n`,
+        `PACKED_SEQUENCES = ${packed}  # @param {type:"boolean"}\n`,
+        `NEFTUNE_ALPHA = ${neftune_noise_alpha}  # @param {type:"number"}\n`,
+        use_dpo ? `\n# DPO Training\n` : '',
+        use_dpo ? `USE_DPO = True  # @param {type:"boolean"}\n` : '',
+        use_dpo ? `DPO_BETA = ${dpo_beta}  # @param {type:"number"}\n` : '',
         isLoRA ? [
           `# LoRA Config\n`,
           `LORA_R = ${lora_r}  # @param {type:"number"}\n`,
@@ -661,7 +874,8 @@ function CopyButton({ text }: { text: string }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: TrainingConfig = {
-  model: null, method: 'qlora', task_type: 'causal_lm', dataset_format: 'alpaca',
+  use_ollama: false, model: null, method: 'qlora', task_type: 'causal_lm', dataset_format: 'alpaca',
+  dataset_url: '', dataset_preview: [],
   epochs: 3, batch_size: 4, learning_rate: 2e-4, max_seq_length: 2048,
   lora_r: 16, lora_alpha: 32, lora_dropout: 0.05,
   lora_target_modules: 'q_proj,v_proj,k_proj,o_proj',
@@ -670,6 +884,7 @@ const DEFAULT_CONFIG: TrainingConfig = {
   output_dir: './finetuned_model', push_to_hub: false, hub_model_id: '',
   use_wandb: false, wandb_project: 'finetuning', quantization_bits: 4,
   gradient_accumulation_steps: 4, weight_decay: 0.01, max_grad_norm: 1.0,
+  use_dpo: false, dpo_beta: 0.1, packed: false, neftune_noise_alpha: 0, flash_attention: true,
 }
 
 export default function FineTuningPage() {
@@ -682,6 +897,43 @@ export default function FineTuningPage() {
   const [notebook, setNotebook] = useState<object | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [copiedCmd, setCopiedCmd] = useState('')
+  const [history, setHistory] = useState<TrainingHistory[]>([])
+  const [mounted, setMounted] = useState(false)
+
+  // Load saved config and history from localStorage on mount
+  useEffect(() => {
+    setMounted(true)
+    const savedConfig = localStorage.getItem('system2ml_finetune_config')
+    if (savedConfig) {
+      try {
+        setConfig(JSON.parse(savedConfig))
+      } catch (e) {
+        console.error('Failed to load saved config:', e)
+      }
+    }
+    const savedHistory = localStorage.getItem('system2ml_finetune_history')
+    if (savedHistory) {
+      try {
+        setHistory(JSON.parse(savedHistory))
+      } catch (e) {
+        console.error('Failed to load history:', e)
+      }
+    }
+  }, [])
+
+  // Save config to localStorage whenever it changes
+  useEffect(() => {
+    if (mounted && config.model) {
+      localStorage.setItem('system2ml_finetune_config', JSON.stringify(config))
+    }
+  }, [config, mounted])
+
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem('system2ml_finetune_history', JSON.stringify(history))
+    }
+  }, [history, mounted])
 
   const filteredModels = MODEL_REGISTRY.filter(m => {
     const matchFamily = familyFilter === 'All' || m.family === familyFilter
@@ -698,10 +950,27 @@ export default function FineTuningPage() {
   const handleGenerateNotebook = async () => {
     if (!config.model) return
     setGenerating(true)
-    await new Promise(r => setTimeout(r, 800)) // UX delay
+    await new Promise(r => setTimeout(r, 800))
     const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
     setNotebook(nb)
     setTab('notebook')
+    
+    // Add to history
+    const newHistoryItem: TrainingHistory = {
+      id: `finetune-${Date.now()}`,
+      modelName: config.model.name,
+      modelId: config.model.hf_id,
+      method: config.method,
+      taskType: config.task_type,
+      epochs: config.epochs,
+      batchSize: config.batch_size,
+      learningRate: config.learningRate,
+      createdAt: new Date().toISOString(),
+      platform: platform,
+      status: 'generated',
+    }
+    setHistory(prev => [newHistoryItem, ...prev].slice(0, 50)) // Keep last 50 items
+    
     setGenerating(false)
   }
 
@@ -714,6 +983,40 @@ export default function FineTuningPage() {
     const modelName = config.model?.name.replace(/\s+/g, '_') || 'model'
     a.download = `system2ml_finetune_${modelName}_${platform}.ipynb`
     a.click()
+    
+    // Update history status
+    if (history.length > 0) {
+      const updatedHistory = [...history]
+      updatedHistory[0].status = 'downloaded'
+      setHistory(updatedHistory)
+    }
+  }
+
+  const loadFromHistory = (item: TrainingHistory) => {
+    const model = MODEL_REGISTRY.find(m => m.hf_id === item.modelId)
+    if (model) {
+      setConfig(prev => ({
+        ...prev,
+        model,
+        method: item.method as any,
+        task_type: item.taskType as any,
+        epochs: item.epochs,
+        batch_size: item.batchSize,
+        learning_rate: item.learningRate,
+      }))
+      setPlatform(item.platform as any)
+      setTab('config')
+    }
+  }
+
+  const clearHistory = () => {
+    if (confirm('Clear all training history?')) {
+      setHistory([])
+    }
+  }
+
+  const deleteHistoryItem = (id: string) => {
+    setHistory(prev => prev.filter(item => item.id !== id))
   }
 
   const TABS: { id: Tab; label: string; icon: any; disabled?: boolean }[] = [
@@ -721,6 +1024,8 @@ export default function FineTuningPage() {
     { id: 'config', label: 'Configure Training', icon: Settings, disabled: !config.model },
     { id: 'notebook', label: 'Notebook', icon: Code2, disabled: !notebook },
     { id: 'deploy', label: 'Deploy', icon: Globe, disabled: !notebook },
+    { id: 'performance', label: 'Performance', icon: Gauge, disabled: !config.model },
+    { id: 'history', label: 'History', icon: Clock, disabled: false },
   ]
 
   const PLATFORMS = [
@@ -871,7 +1176,14 @@ export default function FineTuningPage() {
                   })}
                 </div>
 
-                {/* Quantization for QLoRA */}
+                {/* Ollama Backend Toggle */}
+<div className="flex items-center gap-2 mt-4">
+  <input type="checkbox" checked={config.use_ollama}
+    onChange={e => updateConfig('use_ollama', e.target.checked)}
+    className="w-4 h-4 rounded accent-brand-500" />
+  <label className="text-sm text-neutral-300">Use Ollama backend (optional)</label>
+</div>
+
                 {config.method === 'qlora' && (
                   <div className="flex gap-3">
                     {([4, 8] as const).map(bits => (
@@ -887,6 +1199,68 @@ export default function FineTuningPage() {
                   </div>
                 )}
               </div>
+
+              {/* Dataset URL Input */}
+              <div className="space-y-2">
+                <label className="text-sm text-neutral-300">Dataset URL or Path</label>
+                <div className="flex gap-2">
+                  <input value={config.dataset_url}
+                    onChange={e => updateConfig('dataset_url', e.target.value)}
+                    placeholder="https://huggingface.co/datasets/user/dataset or local path"
+                    className="flex-1 bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none font-mono"
+                  />
+                  <Button variant="outline" size="icon" onClick={() => {
+                    const sampleData = [
+                      { instruction: "Summarize the following text.", input: "The cat sat on the mat.", output: "A cat was sitting on a mat." },
+                      { instruction: "Translate to French.", input: "Hello world", output: "Bonjour le monde" },
+                      { instruction: "Explain in simple terms.", input: "Photosynthesis", output: "Plants use sunlight to convert CO2 and water into food." }
+                    ]
+                    updateConfig('dataset_preview', sampleData)
+                  }}>
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-neutral-500">HuggingFace dataset path, local JSON/CSV file, or URL</p>
+              </div>
+
+              {/* Dataset Preview */}
+              {(config.dataset_preview.length > 0 || config.dataset_url) && (
+                <div className="p-4 rounded-xl bg-neutral-800/50 border border-neutral-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Database className="w-4 h-4 text-brand-400" />
+                    <span className="text-sm font-medium text-white">Dataset Preview</span>
+                    {config.dataset_preview.length > 0 && (
+                      <Badge variant="outline" className="ml-auto text-xs text-neutral-400">
+                        {config.dataset_preview.length} samples
+                      </Badge>
+                    )}
+                  </div>
+                  {config.dataset_preview.length > 0 ? (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {config.dataset_preview.map((sample, i) => (
+                        <div key={i} className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 text-xs">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <span className="text-neutral-500">Instruction</span>
+                              <p className="text-neutral-300 truncate">{String(sample.instruction || '').slice(0, 50)}</p>
+                            </div>
+                            <div>
+                              <span className="text-neutral-500">Input</span>
+                              <p className="text-neutral-300 truncate">{String(sample.input || '').slice(0, 50)}</p>
+                            </div>
+                            <div>
+                              <span className="text-neutral-500">Output</span>
+                              <p className="text-neutral-300 truncate">{String(sample.output || '').slice(0, 50)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-neutral-500">Enter a dataset URL above and click refresh to preview</p>
+                  )}
+                </div>
+              )}
 
               {/* Task & Dataset */}
               <div className="p-6 rounded-2xl bg-neutral-900/50 border border-white/5 space-y-4">
@@ -923,6 +1297,26 @@ export default function FineTuningPage() {
                 <h3 className="font-semibold text-white flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-brand-400" /> Hyperparameters
                 </h3>
+                
+                {/* Quick Presets */}
+                <div className="flex gap-2 mb-4">
+                  {[
+                    { label: 'Quick Test', epochs: 1, batch: 2, lr: 1e-3, desc: 'Fast validation' },
+                    { label: 'Standard', epochs: 3, batch: 4, lr: 2e-4, desc: 'Balanced' },
+                    { label: 'Quality', epochs: 5, batch: 8, lr: 1e-4, desc: 'Best results' },
+                    { label: 'Long Context', epochs: 2, batch: 1, lr: 1e-4, desc: '8192+ tokens' },
+                  ].map(preset => (
+                    <button key={preset.label} onClick={() => {
+                      updateConfig('epochs', preset.epochs)
+                      updateConfig('batch_size', preset.batch)
+                      updateConfig('learning_rate', preset.lr)
+                    }}
+                      className="px-3 py-1.5 rounded-lg text-xs bg-neutral-800 border border-neutral-700 text-neutral-400 hover:border-brand-500 hover:text-white transition-all">
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                
                 <div className="grid grid-cols-2 gap-6">
                   <ConfigSlider label="Epochs" value={config.epochs} min={1} max={10} step={1}
                     onChange={v => updateConfig('epochs', v)} description="Full passes over training data" />
@@ -1002,34 +1396,63 @@ export default function FineTuningPage() {
                 Advanced Settings
               </button>
 
-              {showAdvanced && (
-                <div className="p-6 rounded-2xl bg-neutral-900/50 border border-white/5 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    {[
-                      { key: 'fp16', label: 'FP16', desc: 'Half precision' },
-                      { key: 'bf16', label: 'BF16', desc: 'BFloat16 (better stability)' },
-                      { key: 'gradient_checkpointing', label: 'Gradient Checkpointing', desc: 'Trade compute for VRAM' },
-                      { key: 'push_to_hub', label: 'Push to HuggingFace Hub', desc: 'Auto-upload after training' },
-                      { key: 'use_wandb', label: 'W&B Logging', desc: 'Track experiments' },
-                    ].map(({ key, label, desc }) => (
-                      <label key={key} className="flex items-center gap-3 cursor-pointer">
-                        <input type="checkbox" checked={config[key as keyof TrainingConfig] as boolean}
-                          onChange={e => updateConfig(key as keyof TrainingConfig, e.target.checked)}
-                          className="w-4 h-4 rounded accent-brand-500" />
-                        <div><p className="text-sm text-white">{label}</p><p className="text-xs text-neutral-500">{desc}</p></div>
-                      </label>
-                    ))}
-                  </div>
-                  {config.push_to_hub && (
-                    <div className="space-y-2">
-                      <label className="text-sm text-neutral-300">Hub Model ID</label>
-                      <input value={config.hub_model_id} onChange={e => updateConfig('hub_model_id', e.target.value)}
-                        placeholder="username/my-finetuned-model"
-                        className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none" />
+                  {showAdvanced && (
+                    <div className="p-6 rounded-2xl bg-neutral-900/50 border border-white/5 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        {[
+                          { key: 'fp16', label: 'FP16', desc: 'Half precision' },
+                          { key: 'bf16', label: 'BF16', desc: 'BFloat16 (better stability)' },
+                          { key: 'gradient_checkpointing', label: 'Gradient Checkpointing', desc: 'Trade compute for VRAM' },
+                          { key: 'push_to_hub', label: 'Push to HuggingFace Hub', desc: 'Auto-upload after training' },
+                          { key: 'use_wandb', label: 'W&B Logging', desc: 'Track experiments' },
+                          { key: 'flash_attention', label: 'Flash Attention', desc: '~2x faster attention' },
+                          { key: 'packed', label: 'Packed Sequences', desc: 'Efficient context usage' },
+                          { key: 'use_dpo', label: 'DPO Training', desc: 'Direct Preference Optimization' },
+                        ].map(({ key, label, desc }) => (
+                          <label key={key} className="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" checked={config[key as keyof TrainingConfig] as boolean}
+                              onChange={e => updateConfig(key as keyof TrainingConfig, e.target.checked)}
+                              className="w-4 h-4 rounded accent-brand-500" />
+                            <div><p className="text-sm text-white">{label}</p><p className="text-xs text-neutral-500">{desc}</p></div>
+                          </label>
+                        ))}
+                      </div>
+                      
+                      {config.use_dpo && (
+                        <div className="space-y-2 pt-2 border-t border-neutral-700">
+                          <label className="text-sm text-neutral-300">DPO Beta (reward scaling)</label>
+                          <input type="range" min={0.01} max={0.5} step={0.01} value={config.dpo_beta}
+                            onChange={e => updateConfig('dpo_beta', parseFloat(e.target.value))}
+                            className="w-full accent-brand-500" />
+                          <div className="flex justify-between text-xs text-neutral-500">
+                            <span>0.01 (loose)</span><span>{config.dpo_beta}</span><span>0.5 (strict)</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {config.neftune_noise_alpha > 0 && (
+                        <div className="space-y-2 pt-2 border-t border-neutral-700">
+                          <div className="flex justify-between">
+                            <label className="text-sm text-neutral-300">NEFTune Noise Alpha</label>
+                            <span className="text-sm text-brand-400 font-mono">{config.neftune_noise_alpha}</span>
+                          </div>
+                          <input type="range" min={0} max={50} step={1} value={config.neftune_noise_alpha}
+                            onChange={e => updateConfig('neftune_noise_alpha', parseFloat(e.target.value))}
+                            className="w-full accent-brand-500" />
+                          <p className="text-xs text-neutral-500">Adds noise to embeddings for better instruction following</p>
+                        </div>
+                      )}
+                      
+                      {config.push_to_hub && (
+                        <div className="space-y-2 pt-2 border-t border-neutral-700">
+                          <label className="text-sm text-neutral-300">Hub Model ID</label>
+                          <input value={config.hub_model_id} onChange={e => updateConfig('hub_model_id', e.target.value)}
+                            placeholder="username/my-finetuned-model"
+                            className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none" />
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
             </div>
 
             {/* Right: Summary */}
@@ -1298,6 +1721,231 @@ response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_spec
 print(response)`}</pre>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ─── TAB: Performance ──────────────────────────────────────────────────────── */}
+        {tab === 'performance' && config.model && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white">Performance Analysis</h2>
+                <p className="text-neutral-400 text-sm">Estimate training time and resource requirements</p>
+              </div>
+            </div>
+
+            {/* VRAM Calculator */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="bg-neutral-900/50 border-white/5">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Cpu className="w-5 h-5 text-brand-400" /> VRAM Requirements
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-4 rounded-xl bg-neutral-800/50">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-neutral-400">Base Model</span>
+                      <span className="text-white font-medium">{config.model.vram_gb} GB</span>
+                    </div>
+                    {config.method === 'qlora' && (
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-neutral-400">QLoRA Quantization ({config.quantization_bits}-bit)</span>
+                        <span className="text-purple-400 font-medium">-{Math.round(config.model.vram_gb * 0.75)} GB</span>
+                      </div>
+                    )}
+                    {config.gradient_checkpointing && (
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-neutral-400">Gradient Checkpointing</span>
+                        <span className="text-emerald-400 font-medium">~50% savings</span>
+                      </div>
+                    )}
+                    <div className="pt-3 mt-3 border-t border-neutral-700 flex justify-between items-center">
+                      <span className="text-white font-medium">Estimated VRAM</span>
+                      <span className={cn('text-lg font-bold', 
+                        config.model.vram_gb <= 16 ? 'text-emerald-400' : 
+                        config.model.vram_gb <= 24 ? 'text-amber-400' : 'text-red-400')}>
+                        ~{config.method === 'qlora' 
+                          ? Math.ceil(config.model.vram_gb / 4) + config.batch_size * 0.5
+                          : config.model.vram_gb + config.batch_size * 2
+                        } GB
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="text-xs text-neutral-500">
+                    <p className="mb-2">Recommended GPU by VRAM:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {config.model.vram_gb <= 8 && <Badge className="bg-emerald-500/20 text-emerald-400">RTX 3060 (12GB)</Badge>}
+                      {config.model.vram_gb <= 16 && <Badge className="bg-emerald-500/20 text-emerald-400">RTX 4090 (24GB)</Badge>}
+                      {config.model.vram_gb <= 24 && <Badge className="bg-amber-500/20 text-amber-400">A100 (40GB)</Badge>}
+                      {config.model.vram_gb <= 48 && <Badge className="bg-red-500/20 text-red-400">A100 80GB / H100</Badge>}
+                      {config.model.vram_gb > 48 && <Badge className="bg-red-500/20 text-red-400">Multi-GPU Setup</Badge>}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-neutral-900/50 border-white/5">
+                <CardHeader>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-brand-400" /> Training Time Estimate
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-4 rounded-xl bg-neutral-800/50 space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-neutral-400">Dataset Size</span>
+                      <span className="text-white">~1000 samples</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-400">Epochs</span>
+                      <span className="text-white">{config.epochs}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-400">Batch Size</span>
+                      <span className="text-white">{config.batch_size} × {config.gradient_accumulation_steps} = {config.batch_size * config.gradient_accumulation_steps}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-400">Steps/Epoch</span>
+                      <span className="text-white">~{Math.ceil(1000 / (config.batch_size * config.gradient_accumulation_steps))}</span>
+                    </div>
+                    <div className="pt-3 mt-3 border-t border-neutral-700 flex justify-between items-center">
+                      <span className="text-white font-medium">Est. Training Time</span>
+                      <span className="text-brand-400 font-bold text-lg">
+                        ~{Math.round(config.epochs * 1000 / (config.batch_size * config.gradient_accumulation_steps) * 0.5)} min
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Performance Tips */}
+            <Card className="bg-neutral-900/50 border-white/5">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-brand-400" /> Optimization Tips
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { title: 'Use Gradient Checkpointing', desc: 'Reduces VRAM usage at cost of ~30% more compute time', active: config.gradient_checkpointing },
+                    { title: 'Enable Flash Attention', desc: '~2x faster attention computation for compatible models', active: config.flash_attention },
+                    { title: 'Use FP16/BF16', desc: 'Faster training with mixed precision, BF16 recommended for stability', active: config.fp16 || config.bf16 },
+                    { title: 'Packing Sequences', desc: 'Efficiently use context length for short sequences', active: config.packed },
+                    { title: 'NEFTune Noise', desc: 'Adds noise to embeddings to improve instruction following', active: config.neftune_noise_alpha > 0 },
+                    { title: 'LoRA+', desc: 'Use different learning rates for low-rank matrices', active: false },
+                  ].map(tip => (
+                    <div key={tip.title} className={cn('p-4 rounded-xl border', tip.active ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-neutral-800/30 border-neutral-700')}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {tip.active ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Activity className="w-4 h-4 text-neutral-500" />}
+                        <span className="text-sm font-medium text-white">{tip.title}</span>
+                      </div>
+                      <p className="text-xs text-neutral-500">{tip.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Summary */}
+            <Card className="bg-gradient-to-r from-brand-500/10 to-purple-500/10 border-brand-500/20">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-white mb-1">Configuration Summary</h3>
+                    <p className="text-neutral-400 text-sm">{config.method.toUpperCase()} on {config.model.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-brand-400">
+                      {config.method === 'qlora' ? '~' + Math.ceil(config.model.vram_gb / 4) : config.model.vram_gb}GB
+                    </p>
+                    <p className="text-xs text-neutral-500">Estimated VRAM</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* ─── TAB: History ────────────────────────────────────────────────────────────── */}
+        {tab === 'history' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white">Training History</h2>
+                <p className="text-neutral-400 text-sm">View and re-use your previous fine-tuning configurations</p>
+              </div>
+              {history.length > 0 && (
+                <Button variant="outline" onClick={clearHistory} className="border-neutral-700 text-neutral-400 hover:text-red-400">
+                  <Trash2 className="w-4 h-4 mr-2" /> Clear All
+                </Button>
+              )}
+            </div>
+
+            {history.length === 0 ? (
+              <Card className="bg-neutral-900/50 border-white/5">
+                <CardContent className="pt-6 text-center">
+                  <Clock className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-white mb-2">No Training History</h3>
+                  <p className="text-neutral-400 mb-4">
+                    Your generated notebooks will appear here. Start by selecting a model and generating a notebook.
+                  </p>
+                  <Button onClick={() => setTab('models')} className="bg-brand-500 hover:bg-brand-600">
+                    Select a Model
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {history.map((item) => (
+                  <Card key={item.id} className="bg-neutral-900/50 border-white/5 hover:border-brand-500/30 transition-all">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                            <Brain className="w-6 h-6 text-brand-400" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-white">{item.modelName}</h3>
+                            <p className="text-neutral-400 text-sm">{item.method.toUpperCase()} • {item.taskType} • {item.platform}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge className="bg-neutral-700/50 text-neutral-300 text-xs">Epochs: {item.epochs}</Badge>
+                              <Badge className="bg-neutral-700/50 text-neutral-300 text-xs">Batch: {item.batchSize}</Badge>
+                              <Badge className="bg-neutral-700/50 text-neutral-300 text-xs">LR: {item.learningRate.toExponential(0)}</Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-xs text-neutral-500">
+                              {new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString()}
+                            </p>
+                            <Badge className={cn('mt-1',
+                              item.status === 'generated' ? 'bg-blue-500/20 text-blue-400' :
+                              item.status === 'downloaded' ? 'bg-emerald-500/20 text-emerald-400' :
+                              'bg-purple-500/20 text-purple-400'
+                            )}>
+                              {item.status}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" onClick={() => loadFromHistory(item)} className="border-neutral-700">
+                              <RefreshCw className="w-4 h-4 mr-1" /> Load
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => deleteHistoryItem(item.id)} className="text-neutral-400 hover:text-red-400">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

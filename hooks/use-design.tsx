@@ -114,6 +114,9 @@ const defaultConstraints: UserConstraints = {
 
 const DesignContext = createContext<DesignContextType | undefined>(undefined)
 
+const STORAGE_KEY = 'system2ml_design_state'
+const DATASET_KEY = 'system2ml_dataset'
+
 export function DesignProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DesignState>({
     dataset: null,
@@ -127,42 +130,65 @@ export function DesignProvider({ children }: { children: ReactNode }) {
     isLoading: false,
   })
 
+  // Load from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem('system2ml_design_state')
-    if (stored) {
-      try {
+    try {
+      // Load design state
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
         const parsed = JSON.parse(stored)
-        setState(prev => ({ ...prev, ...parsed }))
-      } catch {
-        localStorage.removeItem('system2ml_design_state')
+        setState(prev => ({
+          ...prev,
+          dataset: parsed.dataset || null,
+          constraints: parsed.constraints || defaultConstraints,
+          selectedPipeline: parsed.selectedPipeline || null,
+          designStep: parsed.designStep || 'input',
+          feasibilityPassed: parsed.feasibilityPassed || false,
+          safetyGatePassed: parsed.safetyGatePassed || false,
+          pipelineCandidates: parsed.pipelineCandidates || [],
+        }))
       }
-    }
 
-    // Also check for dataset stored by quick upload
-    const datasetStored = localStorage.getItem('system2ml_dataset')
-    if (datasetStored) {
-      try {
+      // Load dataset if exists
+      const datasetStored = localStorage.getItem(DATASET_KEY)
+      if (datasetStored) {
         const parsed = JSON.parse(datasetStored)
         setState(prev => ({ ...prev, dataset: parsed }))
-      } catch {
-        localStorage.removeItem('system2ml_dataset')
       }
+    } catch (e) {
+      console.error('Error loading design state:', e)
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(DATASET_KEY)
     }
   }, [])
 
+  // Save to localStorage whenever state changes
   useEffect(() => {
-    localStorage.setItem('system2ml_design_state', JSON.stringify({
-      dataset: state.dataset,
-      constraints: state.constraints,
-      selectedPipeline: state.selectedPipeline,
-      designStep: state.designStep,
-      feasibilityPassed: state.feasibilityPassed,
-      safetyGatePassed: state.safetyGatePassed,
-    }))
-  }, [state.dataset, state.constraints, state.selectedPipeline, state.designStep, state.feasibilityPassed, state.safetyGatePassed])
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        dataset: state.dataset,
+        constraints: state.constraints,
+        selectedPipeline: state.selectedPipeline,
+        designStep: state.designStep,
+        feasibilityPassed: state.feasibilityPassed,
+        safetyGatePassed: state.safetyGatePassed,
+        pipelineCandidates: state.pipelineCandidates,
+      }))
+
+      // Also save dataset separately
+      if (state.dataset) {
+        localStorage.setItem(DATASET_KEY, JSON.stringify(state.dataset))
+      }
+    } catch (e) {
+      console.error('Error saving design state:', e)
+    }
+  }, [state.dataset, state.constraints, state.selectedPipeline, state.designStep, state.feasibilityPassed, state.safetyGatePassed, state.pipelineCandidates])
 
   const setDataset = useCallback((dataset: DatasetProfile | null) => {
     setState(prev => ({ ...prev, dataset }))
+    if (dataset) {
+      localStorage.setItem(DATASET_KEY, JSON.stringify(dataset))
+    }
   }, [])
 
   const setConstraints = useCallback((constraints: Partial<UserConstraints>) => {
@@ -207,7 +233,7 @@ export function DesignProvider({ children }: { children: ReactNode }) {
       feasibilityPassed: false,
       safetyGatePassed: false,
     }))
-    localStorage.removeItem('system2ml_design_state')
+    localStorage.removeItem(STORAGE_KEY)
   }, [])
 
   const canProceedToDesign = useCallback(() => {

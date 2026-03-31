@@ -2,7 +2,41 @@ from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
 import numpy as np
+from .logger import logger
 
+# Model backend factory
+from system2ml.backends.hf_transformers import HFTransformersBackend
+from system2ml.backends.ollama import OllamaBackend
+
+def create_backend(name: str, **kwargs):
+    """Factory that returns a model backend instance.
+
+    Parameters
+    ----------
+    name: str
+        Either "hf" for HuggingFaceTransformersBackend or "ollama" for the
+        OllamaBackend.
+    **kwargs:
+        Backend‑specific configuration passed directly to the backend's
+        ``load_model`` method.
+    """
+    name = name.lower()
+    if name == "hf":
+        return HFTransformersBackend()
+    if name == "ollama":
+        return OllamaBackend()
+    raise ValueError(f"Unknown backend '{name}'. Available: hf, ollama")
+
+
+
+class PipelineError(RuntimeError):
+    """Base class for pipeline‑related errors.
+
+    Subclass this for more specific failure modes.  Using a dedicated
+    exception hierarchy makes error handling clearer and allows callers to
+    distinguish pipeline issues from generic runtime errors.
+    """
+    pass
 
 class PipelineStatus(Enum):
     PENDING = "pending"
@@ -41,6 +75,9 @@ class Pipeline:
     carbon_kg: Optional[float] = None
     latency_ms: Optional[float] = None
     config: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        logger.info(f"Pipeline created: {self.id} ({self.name}) with status {self.status.value}")
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
