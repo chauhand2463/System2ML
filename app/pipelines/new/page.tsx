@@ -235,8 +235,8 @@ export default function NewPipelinePage() {
                 </label>
                 <input
                   type="number"
-                  value={formData.constraints.max_cost_usd}
-                  onChange={(e) => setFormData({ ...formData, constraints: { ...formData.constraints, max_cost_usd: parseFloat(e.target.value) } })}
+                  value={formData.constraints.max_cost_usd || ''}
+                  onChange={(e) => setFormData({ ...formData, constraints: { ...formData.constraints, max_cost_usd: parseFloat(e.target.value) || 0 } })}
                   className="w-full px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
@@ -247,8 +247,8 @@ export default function NewPipelinePage() {
                 <input
                   type="number"
                   step="0.1"
-                  value={formData.constraints.max_carbon_kg}
-                  onChange={(e) => setFormData({ ...formData, constraints: { ...formData.constraints, max_carbon_kg: parseFloat(e.target.value) } })}
+                  value={formData.constraints.max_carbon_kg || ''}
+                  onChange={(e) => setFormData({ ...formData, constraints: { ...formData.constraints, max_carbon_kg: parseFloat(e.target.value) || 0 } })}
                   className="w-full px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
@@ -258,8 +258,8 @@ export default function NewPipelinePage() {
                 </label>
                 <input
                   type="number"
-                  value={formData.constraints.max_latency_ms}
-                  onChange={(e) => setFormData({ ...formData, constraints: { ...formData.constraints, max_latency_ms: parseInt(e.target.value) } })}
+                  value={formData.constraints.max_latency_ms || ''}
+                  onChange={(e) => setFormData({ ...formData, constraints: { ...formData.constraints, max_latency_ms: parseInt(e.target.value) || 0 } })}
                   className="w-full px-4 py-2 rounded-lg bg-neutral-800 border border-neutral-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>

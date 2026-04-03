@@ -1,13 +1,14 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { TrendingUp, AlertCircle, Zap, CheckCircle2, Activity, ArrowUpRight, Play, Clock } from 'lucide-react'
+import { TrendingUp, AlertCircle, Zap, CheckCircle2, Activity, ArrowUpRight, Play, Clock, Server, Gauge, Flame } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { QuickDatasetUpload } from '@/components/quick-upload'
+import { PipelineStatusChart } from '@/components/dashboard/pipeline-status-chart'
+import { RunsChart } from '@/components/dashboard/runs-chart'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://system2ml-api.onrender.com'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
 async function getData() {
-  // Return mock data if no API configured
   if (!API_BASE || API_BASE === '' || !API_BASE.startsWith('http')) {
     return {
       pipelines: [],
@@ -15,17 +16,21 @@ async function getData() {
       activities: [],
       metrics: { total_pipelines: 0, active_pipelines: 0, total_runs: 0, completed_runs: 0, avg_accuracy: 0, avg_cost: 0, avg_carbon: 0 },
       failures: [],
+      isApiConnected: false,
     }
   }
 
   try {
-    const [pipelinesRes, runsRes, activitiesRes, metricsRes, failuresRes] = await Promise.all([
+    const [healthRes, pipelinesRes, runsRes, activitiesRes, metricsRes, failuresRes] = await Promise.all([
+      fetch(`${API_BASE}/health`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
       fetch(`${API_BASE}/api/pipelines`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
       fetch(`${API_BASE}/api/runs`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
       fetch(`${API_BASE}/api/activities`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
       fetch(`${API_BASE}/api/metrics`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
       fetch(`${API_BASE}/api/failures`, { cache: 'no-store', next: { revalidate: 0 } }).catch(() => null),
     ])
+    
+    const isApiConnected = healthRes?.ok === true
     
     const pipelines = pipelinesRes?.ok ? await pipelinesRes.json() : { pipelines: [] }
     const runs = runsRes?.ok ? await runsRes.json() : { runs: [] }
@@ -39,6 +44,7 @@ async function getData() {
       activities: activities.activities || [],
       metrics: metrics,
       failures: failures.failures || [],
+      isApiConnected,
     }
   } catch (e) {
     console.error('Error fetching data:', e)
@@ -48,12 +54,13 @@ async function getData() {
       activities: [],
       metrics: { total_pipelines: 0, active_pipelines: 0, total_runs: 0, completed_runs: 0, avg_accuracy: 0, avg_cost: 0, avg_carbon: 0 },
       failures: [],
+      isApiConnected: false,
     }
   }
 }
 
 export default async function DashboardPage() {
-  const { pipelines, runs, activities, metrics, failures } = await getData()
+  const { pipelines, runs, activities, metrics, failures, isApiConnected } = await getData()
 
   const activePipelines = pipelines.filter((p: any) => p.status === 'active').length
   const designedPipelines = pipelines.filter((p: any) => p.status === 'designed').length
@@ -109,8 +116,8 @@ export default async function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="p-8 min-h-screen">
-        {/* API Not Configured Banner */}
-        {(!API_BASE || API_BASE === '') && (
+        {/* API Not Connected Banner */}
+        {!isApiConnected && (
           <div className="mb-6 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20">
             <div className="flex items-center gap-3">
               <AlertCircle className="w-5 h-5 text-yellow-400" />
@@ -222,46 +229,44 @@ export default async function DashboardPage() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Pipeline Status */}
-            <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
-              <h2 className="text-lg font-bold text-white mb-4">Pipeline Status</h2>
-              <div className="space-y-4">
-                {[
-                  { label: 'Active', value: activePipelines, color: 'bg-emerald-500', width: `${(activePipelines / Math.max(totalPipelines, 1)) * 100}%` },
-                  { label: 'Designed', value: designedPipelines, color: 'bg-brand-500', width: `${(designedPipelines / Math.max(totalPipelines, 1)) * 100}%` },
-                  { label: 'Total Runs', value: runs.length, color: 'bg-purple-500', width: '100%' },
-                ].map((item, i) => (
-                  <div key={i}>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-neutral-400 text-sm">{item.label}</span>
-                      <span className="text-white font-semibold">{item.value}</span>
-                    </div>
-                    <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${item.color} rounded-full transition-all duration-1000`} 
-                        style={{ width: item.width }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Pipeline Status Chart */}
+            <PipelineStatusChart />
+
+            {/* Runs Chart */}
+            <RunsChart />
 
             {/* Metrics */}
             <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">
               <h2 className="text-lg font-bold text-white mb-4">Average Metrics</h2>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Accuracy', value: `${((metrics?.avg_accuracy || 0) * 100).toFixed(1)}%`, color: 'text-emerald-400' },
-                  { label: 'Cost', value: `$${(metrics?.avg_cost || 0).toFixed(2)}`, color: 'text-amber-400' },
-                  { label: 'Carbon', value: `${(metrics?.avg_carbon || 0).toFixed(3)}kg`, color: 'text-cyan-400' },
-                  { label: 'Latency', value: `${(metrics?.avg_latency || 0).toFixed(0)}ms`, color: 'text-purple-400' },
-                ].map((metric, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-neutral-800/30 border border-white/5">
-                    <p className="text-neutral-500 text-xs mb-1">{metric.label}</p>
-                    <p className={`text-xl font-bold ${metric.color}`}>{metric.value}</p>
+                <div className="p-4 rounded-xl bg-neutral-800/30 border border-white/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-400" />
+                    <p className="text-neutral-500 text-xs">Accuracy</p>
                   </div>
-                ))}
+                  <p className="text-xl font-bold text-emerald-400">{((metrics?.avg_accuracy || 0) * 100).toFixed(1)}%</p>
+                </div>
+                <div className="p-4 rounded-xl bg-neutral-800/30 border border-white/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Server className="w-4 h-4 text-amber-400" />
+                    <p className="text-neutral-500 text-xs">Cost</p>
+                  </div>
+                  <p className="text-xl font-bold text-amber-400">${(metrics?.avg_cost || 0).toFixed(2)}</p>
+                </div>
+                <div className="p-4 rounded-xl bg-neutral-800/30 border border-white/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Flame className="w-4 h-4 text-cyan-400" />
+                    <p className="text-neutral-500 text-xs">Carbon</p>
+                  </div>
+                  <p className="text-xl font-bold text-cyan-400">{(metrics?.avg_carbon || 0).toFixed(3)}kg</p>
+                </div>
+                <div className="p-4 rounded-xl bg-neutral-800/30 border border-white/5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Gauge className="w-4 h-4 text-purple-400" />
+                    <p className="text-neutral-500 text-xs">Latency</p>
+                  </div>
+                  <p className="text-xl font-bold text-purple-400">{(metrics?.avg_latency || 0).toFixed(0)}ms</p>
+                </div>
               </div>
             </div>
 
