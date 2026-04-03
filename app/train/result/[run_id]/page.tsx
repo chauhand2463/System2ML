@@ -38,6 +38,10 @@ export default function TrainResultPage({ params }: TrainResultPageProps) {
   const isKilled = run?.status === 'killed'
   const isStopped = run?.status === 'stopped'
   const isCompleted = run?.status === 'completed'
+  
+  // Training never actually started (duration = 0, cost = 0)
+  const isNeverStarted = (run?.elapsedTime === 0 || !run?.elapsedTime) && (run?.costSpent === 0 || !run?.costSpent)
+  
   const canDownload = isCompleted && allPassed
 
   // Event handlers
@@ -181,17 +185,41 @@ print(result)`
                 <XCircle className="w-8 h-8 text-red-400" />
               ) : isCompleted ? (
                 <CheckCircle className="w-8 h-8 text-emerald-400" />
+              ) : isNeverStarted ? (
+                <XCircle className="w-8 h-8 text-orange-400" />
               ) : (
                 <AlertTriangle className="w-8 h-8 text-yellow-400" />
               )}
               <h1 className="text-3xl font-bold text-white">
-                {isKilled ? 'Training Stopped' : isStopped ? 'Training Stopped' : isCompleted ? 'Training Complete' : 'Training Failed'}
+                {isKilled ? 'Training Stopped' : isStopped ? 'Training Stopped' : isCompleted ? 'Training Complete' : isNeverStarted ? 'Training Could Not Start' : 'Training Failed'}
               </h1>
             </div>
             <p className="text-neutral-400">
               Run ID: {run?.id || run_id}
             </p>
           </div>
+
+          {/* Never Started Banner */}
+          {isNeverStarted && (
+            <Card className="bg-orange-500/10 border-orange-500/20 mb-6">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-6 h-6 text-orange-400 mt-0.5" />
+                  <div>
+                    <p className="text-orange-400 font-medium">
+                      Training Never Started
+                    </p>
+                    <p className="text-neutral-400 text-sm mt-1">
+                      The pipeline state may have been lost. Please restart the design flow from the beginning.
+                    </p>
+                    <p className="text-neutral-500 text-xs mt-2">
+                      Tip: Make sure to complete the approval step before starting training.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Killed/Stopped Banner */}
           {(isKilled || isStopped) && (

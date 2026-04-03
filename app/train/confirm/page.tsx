@@ -135,11 +135,12 @@ export default function TrainConfirmPage() {
       setTrainingRun(run)
       setStarted(true)
 
-      // Also create Colab job for real GPU training
+      // Also create Colab job for real GPU training (only for LLMs)
       try {
         const trainingTarget = JSON.parse(localStorage.getItem('system2ml_training_target') || '{}')
         
-        if (trainingTarget.base_model) {
+        // Only create Colab notebook for LLM training, not classical ML
+        if (trainingTarget.model_type === 'llm' && trainingTarget.base_model) {
           const colabResult = await createColabTraining({
             dataset_profile: {
               name: dataset?.name || 'training_data',
@@ -148,7 +149,7 @@ export default function TrainConfirmPage() {
               columns: (dataset as any)?.columns || 10,
               features: (dataset as any)?.features || 8,
               has_labels: dataset?.labelPresent || true,
-              label_type: (dataset as any)?.labelType || 'classification',
+              label_type: trainingTarget.task_type || 'classification',
             },
             training_target: trainingTarget,
             constraints: {
@@ -163,6 +164,8 @@ export default function TrainConfirmPage() {
           // Store Colab job info
           localStorage.setItem('system2ml_colab_job', JSON.stringify(colabResult))
           console.log('Colab job created:', colabResult)
+        } else if (trainingTarget.model_type === 'ml') {
+          console.log('Classical ML model selected - using local training (no Colab needed)')
         }
       } catch (colabError) {
         console.error('Colab job creation failed:', colabError)

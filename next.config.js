@@ -9,11 +9,10 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: [
-        'localhost:3000', 
-        'system2-ml.vercel.app',
-        'system2ml.vercel.app'
-      ],
+      allowedOrigins: (
+        process.env.ALLOWED_ORIGINS || 
+        'localhost:3000,system2-ml.vercel.app,system2ml.vercel.app'
+      ).split(',').map(o => o.trim()).filter(Boolean),
     },
   },
   env: {

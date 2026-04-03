@@ -88,21 +88,47 @@ export default function DesignResultsPage() {
       if (result.can_execute) {
         setSelectedPipeline(candidate)
         
-        // Map model family to actual HuggingFace model ID
-        const modelMap: Record<string, string> = {
-          'classical': 'microsoft/phi-2',
-          'small_deep': 'microsoft/Phi-3-mini-4k-instruct',
-          'compressed': 'microsoft/phi-2',
-          'transformer': 'meta-llama/Llama-3.1-8B-Instruct',
-          'random_forest': 'microsoft/phi-2',
-          'xgboost': 'microsoft/phi-2',
-          'logistic_regression': 'microsoft/phi-2',
+        const modelFamily = candidate.model_families?.[0] || candidate.modelFamily || 'classical'
+        
+        // Map model family to actual model ID and display name
+        // LLMs get HuggingFace IDs, Classical ML models get null (use local training)
+        const modelMap: Record<string, { id: string | null, name: string, type: 'llm' | 'ml' }> = {
+          // LLMs (transformer-based)
+          'transformer': { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'LLaMA 3.1 8B', type: 'llm' },
+          'llama': { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'LLaMA 3.1 8B', type: 'llm' },
+          'phi': { id: 'microsoft/phi-2', name: 'Phi-2', type: 'llm' },
+          'small_deep': { id: 'microsoft/Phi-3-mini-4k-instruct', name: 'Phi-3 Mini', type: 'llm' },
+          'mistral': { id: 'mistralai/Mistral-7B-Instruct-v0.3', name: 'Mistral 7B', type: 'llm' },
+          'compressed': { id: 'microsoft/phi-2', name: 'Phi-2', type: 'llm' },
+          
+          // Classical ML (no HF model - use local training)
+          'classical': { id: null, name: 'Random Forest', type: 'ml' },
+          'random_forest': { id: null, name: 'Random Forest', type: 'ml' },
+          'xgboost': { id: null, name: 'XGBoost', type: 'ml' },
+          'logistic_regression': { id: null, name: 'Logistic Regression', type: 'ml' },
+        }
+        
+        const modelInfo = modelMap[modelFamily] || { id: null, name: 'Random Forest', type: 'ml' }
+        
+        // Determine task type from dataset
+        const taskType = (dataset as any)?.labelType || 'classification'
+        
+        // Determine training method based on model type and budget
+        const getTrainingMethod = () => {
+          if (modelInfo.type === 'ml') return 'classical'
+          // For LLMs: QLoRA for low budget (<$10), LoRA for normal budget
+          return candidate.estimatedCost < 10 ? 'qlora' : 'lora'
         }
         
         // Save training target for Colab notebook generation
         const trainingTarget = {
-          base_model: modelMap[candidate.modelFamily] || 'microsoft/phi-2',
-          method: 'lora',
+          // Only set base_model for LLMs, null for classical ML
+          base_model: modelInfo.type === 'llm' ? modelInfo.id : null,
+          model_name: modelInfo.name,
+          model_type: modelInfo.type,
+          method: getTrainingMethod(),
+          task_type: taskType,
+          dataset_format: 'csv',
           max_budget_usd: candidate.estimatedCost,
         }
         localStorage.setItem('system2ml_training_target', JSON.stringify(trainingTarget))

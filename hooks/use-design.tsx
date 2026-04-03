@@ -42,12 +42,14 @@ export interface PipelineCandidate {
   name: string
   description: string
   modelFamily: string
+  model_families?: string[]  // For AI-generated pipelines
   estimatedCost: number
   estimatedCarbon: number
   estimatedLatencyMs: number
   estimatedAccuracy: number
   violatesConstraints: Array<{ constraint: string; message: string }>
   isFeasible: boolean
+  modelType?: 'llm' | 'ml'  // Distinguish between LLM and classical ML
 }
 
 export interface TrainingRun {

@@ -133,6 +133,112 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS workspaces (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            owner_id INTEGER NOT NULL,
+            description TEXT,
+            settings TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (owner_id) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_members (
+            workspace_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT DEFAULT 'viewer',
+            joined_at TEXT NOT NULL,
+            PRIMARY KEY (workspace_id, user_id),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS dataset_versions (
+            id TEXT PRIMARY KEY,
+            dataset_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            data BLOB,
+            metadata TEXT,
+            parent_version_id TEXT,
+            pipeline_id TEXT,
+            created_by INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS models (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            version TEXT NOT NULL,
+            pipeline_id TEXT,
+            dataset_version_id TEXT,
+            metrics TEXT,
+            artifacts TEXT,
+            deployment_status TEXT DEFAULT 'unused',
+            owner_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (owner_id) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS comments (
+            id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            mentions TEXT,
+            parent_comment_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (parent_comment_id) REFERENCES comments(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS budget_alerts (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            threshold_percent INTEGER NOT NULL,
+            alert_type TEXT NOT NULL,
+            notification_method TEXT DEFAULT 'webhook',
+            webhook_url TEXT,
+            email TEXT,
+            is_active INTEGER DEFAULT 1,
+            last_triggered_at TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id)
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            name TEXT NOT NULL,
+            avatar TEXT,
+            provider TEXT DEFAULT 'email',
+            role TEXT DEFAULT 'viewer',
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+
     conn.commit()
     conn.close()
     print(f"[DB] Initialized database at {DB_PATH}")
@@ -508,7 +614,104 @@ class UserStore:
         conn.close()
 
 
-@dataclass
+def get_user_roles():
+    return ["admin", "data_scientist", "viewer"]
+
+
+def can_user_perform_action(user_role: str, action: str) -> bool:
+    permissions = {
+        "admin": [
+            "create_project",
+            "delete_project",
+            "manage_users",
+            "view_all_projects",
+            "manage_workspace",
+            "deploy_model",
+            "view_analytics",
+            "manage_alerts",
+            "manage_settings",
+            "view_budget",
+        ],
+        "data_scientist": [
+            "create_project",
+            "view_own_projects",
+            "run_training",
+            "deploy_model",
+            "view_analytics",
+            "comment_pipeline",
+            "upload_dataset",
+            "view_budget",
+        ],
+        "viewer": ["view_own_projects", "comment_pipeline", "view_analytics"],
+    }
+    return action in permissions.get(user_role, [])
+
+
+class UserStore:
+    @staticmethod
+    def create(
+        email: str, password: str, name: str, provider: str = "email", role: str = "viewer"
+    ) -> int:
+        conn = get_db()
+        c = conn.cursor()
+        now = datetime.utcnow().isoformat()
+
+        c.execute(
+            "INSERT INTO users (email, password_hash, name, provider, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (email, hash_password(password), name, provider, role, now, now),
+        )
+        conn.commit()
+        user_id = c.lastrowid
+        conn.close()
+        return user_id
+
+    @staticmethod
+    def get_by_email(email: str):
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE email = ?", (email,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return dict(zip([col[0] for col in c.description], row))
+        return None
+
+    @staticmethod
+    def get_by_id(user_id: int):
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return dict(zip([col[0] for col in c.description], row))
+        return None
+
+    @staticmethod
+    def update_role(user_id: int, role: str) -> bool:
+        if role not in get_user_roles():
+            return False
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
+            (role, datetime.utcnow().isoformat(), user_id),
+        )
+        conn.commit()
+        conn.close()
+        return True
+
+    @staticmethod
+    def get_all():
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT id, email, name, role, provider, is_active, created_at FROM users")
+        rows = c.fetchall()
+        conn.close()
+        columns = [col[0] for col in c.description]
+        return [dict(zip(columns, row)) for row in rows]
+
+
 class SessionStore:
     @staticmethod
     def create(user_id: int, token: str, expires_in_days: int = 7) -> str:

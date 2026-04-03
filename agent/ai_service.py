@@ -213,6 +213,14 @@ Return ONLY valid JSON in this exact format:
 
     def generate_notebook(self, config: Dict[str, Any]) -> str:
         """Generate AI-powered Colab notebook"""
+        # Use colab_service for structured notebook generation
+        try:
+            from agent.colab_service import get_colab_service
+
+            colab = get_colab_service()
+            return colab.create_notebook(config)
+        except Exception as e:
+            logger.warning(f"Colab service failed: {e}, using AI generation")
 
         prompt = self._build_notebook_prompt(config)
 
@@ -318,15 +326,26 @@ Return ONLY valid notebook JSON with this structure:
     def _generate_notebook_fallback(self, config: Dict) -> str:
         """Generate fallback notebook template"""
         model_id = config.get("model_id", "microsoft/phi-2")
+        model_name = config.get("model_name", model_id.split("/")[-1])
         method = config.get("method", "lora")
 
+        # Use colab_service for proper notebook generation
+        try:
+            from agent.colab_service import get_colab_service
+
+            colab = get_colab_service()
+            return colab.create_notebook(config)
+        except Exception as e:
+            logger.warning(f"Colab service failed in fallback: {e}")
+
+        # Fallback to simple template if colab service fails
         notebook = {
             "cells": [
                 {
                     "cell_type": "markdown",
                     "metadata": {},
                     "source": [
-                        f"# Fine-Tuning {model_id.split('/')[-1]} with {method.upper()}\n\n**System2ML Pipeline Training**"
+                        f"# Fine-Tuning {model_name} with {method.upper()}\n\n**System2ML Pipeline Training**"
                     ],
                 },
                 {
