@@ -969,6 +969,7 @@ export default function FineTuningPage() {
   const [search, setSearch] = useState('')
   const [platform, setPlatform] = useState<Platform>('colab')
   const [generating, setGenerating] = useState(false)
+  const [generationStatus, setGenerationStatus] = useState<string>('')
   const [notebook, setNotebook] = useState<object | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [copiedCmd, setCopiedCmd] = useState('')
@@ -1049,6 +1050,7 @@ export default function FineTuningPage() {
       return
     }
     setGenerating(true)
+    setGenerationStatus('Preparing notebook configuration...')
     
     try {
       // Call backend AI service to generate notebook
@@ -1059,6 +1061,7 @@ export default function FineTuningPage() {
         dataset_format: config.dataset_format,
         dataset_url: config.dataset_url,
       })
+      setGenerationStatus('Connecting to AI service...')
       
       const response = await fetch('/api/training/colab/download', {
         method: 'POST',
@@ -1099,16 +1102,20 @@ export default function FineTuningPage() {
         }
         console.warn('Backend error, using local fallback:', errorData.detail)
         // Fall back to local generation - this is expected when backend is down
+        setGenerationStatus('Using local fallback generator...')
         const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
         setNotebook(nb)
         setTab('notebook')
         setGenerating(false)
+        setGenerationStatus('')
         return
       }
 
+      setGenerationStatus('Generating notebook with AI...')
       const result = await response.json()
       console.log('Notebook generated, result keys:', Object.keys(result))
       
+      setGenerationStatus('Processing notebook cells...')
       const notebook = JSON.parse(result.notebook_json || '{}')
       setNotebook(notebook)
       setTab('notebook')
@@ -1128,16 +1135,19 @@ export default function FineTuningPage() {
         status: 'generated',
       }
       setHistory(prev => [newHistoryItem, ...prev].slice(0, 50))
+      setGenerationStatus('Notebook generated successfully!')
       
     } catch (error: any) {
       console.error('Failed to generate AI notebook:', error)
       // Fallback to local generation if backend fails
       console.log('Falling back to local notebook generation...')
+      setGenerationStatus('Falling back to local generator...')
       const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
       setNotebook(nb)
       setTab('notebook')
     } finally {
       setGenerating(false)
+      setTimeout(() => setGenerationStatus(''), 3000)
     }
   }
 
@@ -1703,7 +1713,7 @@ export default function FineTuningPage() {
 
                 <Button onClick={handleGenerateNotebook} disabled={generating || !config.model}
                   className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 h-12 text-base">
-                  {generating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</> :
+                  {generating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{generationStatus || 'Generating...'}</> :
                     <><Sparkles className="w-4 h-4 mr-2" />Generate Notebook</>}
                 </Button>
               </div>
@@ -1788,14 +1798,15 @@ export default function FineTuningPage() {
                       <div className="flex-1 py-3 px-4 relative group">
                         {cell.cell_type === 'code' ? (
                           <div className="relative">
-                            <CopyButton text={(cell.source || []).join('')} />
+                            <CopyButton text={Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '')} />
                             <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-48 pr-8">
-                              {((cell.source || []).join('').slice(0, 600))}{((cell.source || []).join('').length > 600 ? '\n...' : '')}
+                              {(Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '')).slice(0, 600)}
+                              {(Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '')).length > 600 ? '\n...' : ''}
                             </pre>
                           </div>
                         ) : (
                           <div className="text-xs text-neutral-400 font-mono whitespace-pre-wrap leading-relaxed">
-                            {((cell.source || []).join('').slice(0, 300))}
+                            {(Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '')).slice(0, 300)}
                           </div>
                         )}
                       </div>

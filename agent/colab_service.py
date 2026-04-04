@@ -10,9 +10,10 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+from fastapi import HTTPException
 
-# Colab Notebook Templates for different training methods
+
+logger = logging.getLogger(__name__)
 COLAB_NOTEBOOK_TEMPLATE = {
     "lora": """{
  "cells": [
@@ -461,7 +462,7 @@ class ColabTrainingService:
         return self._ai_generator
 
     def create_notebook(
-        self, config: Dict[str, Any], use_ai: bool = True, prefer_local: bool = True
+        self, config: Dict[str, Any], use_ai: bool = False, prefer_local: bool = False
     ) -> str:
         """Generate Colab notebook JSON using AI or template"""
         from agent.notebook.generator import NotebookGenerator
@@ -502,334 +503,7 @@ class ColabTrainingService:
             logger.error(f"Notebook generation failed: {e}")
             raise
 
-        # Generate task-specific instructions
-        task_instructions = {
-            "classification": "This is a classification task. The model learns to predict categorical labels.",
-            "regression": "This is a regression task. The model learns to predict continuous values.",
-            "instruction": "This is an instruction tuning task. The model learns to follow instructions and generate appropriate responses.",
-        }
-        task_desc = task_instructions.get(task_type, task_instructions["classification"])
-
-        if method == "lora":
-            method_name = "LoRA"
-            cells = [
-                {
-                    "cell_type": "markdown",
-                    "metadata": {},
-                    "source": [
-                        f"# Fine-Tuning {model_name} with LoRA\n\n**System2ML Pipeline Training**\n\n### Task: {task_type.capitalize()}\n{task_desc}"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Install Dependencies\n!pip install -q transformers datasets peft accelerate bitsandbytes torch\n!pip install -q scikit-learn pandas numpy\nprint('✅ Dependencies installed!')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f"# Configuration\nimport os\nimport json\nimport pandas as pd\nimport torch\nfrom datetime import datetime\n\nMODEL_NAME = \"{model_id}\"\nTRAINING_METHOD = \"{method}\"\nOUTPUT_DIR = \"/content/model_adapter\"\nMAX_BUDGET_USD = {config.get('max_budget', 5)}\n\nprint(f'🤖 Model: {{MODEL_NAME}}')\nprint(f'🔧 Method: {{TRAINING_METHOD}}')\nprint(f'💰 Budget: ${{MAX_BUDGET_USD}}')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Upload Dataset\nfrom google.colab import files\nprint('📁 Please upload your CSV dataset:')\nuploaded = files.upload()\nfilename = list(uploaded.keys())[0]\ndf = pd.read_csv(filename)\nprint(f'✅ Dataset loaded: {{len(df)}} rows, {{len(df.columns)}} columns')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Prepare Data for LLM Fine-tuning (Instruction Format)\nfrom sklearn.model_selection import train_test_split\n\n# Auto-detect label column\nlabel_candidates = ['label', 'target', 'y', 'class', 'output']\nlabel_col = next((c for c in df.columns if c.lower() in label_candidates), df.columns[-1])\nfeature_cols = [c for c in df.columns if c != label_col]\n\n# Create instruction-formatted text for LLM\ndef create_instruction_text(row):\n    features = \", \".join([f\"{{k}}={{v}}\" for k, v in row.items() if k != label_col])\n    label = row[label_col]\n    return f\"Input: {{features}}\\nOutput: {{label}}\"\n\ndf['instruction_text'] = df.apply(create_instruction_text, axis=1)\n\nX = df['instruction_text'].values\ny = df[label_col].values\nX_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)\n\nprint(f\"✅ Data prepared for LLM fine-tuning\")\nprint(f\"Example: {{X_train[0][:100]}}...\")\nprint(f\"✅ Split - Train: {{len(X_train)}}, Validation: {{len(X_val)}}\")"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f'# Load Model with LoRA\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom peft import LoraConfig, get_peft_model, TaskType\n\ntokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\n\nmodel = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=\'auto\', torch_dtype=torch.float16, trust_remote_code=True)\n\n# Configure LoRA (r={lora_r}, alpha={lora_alpha}, dropout={lora_dropout})\nlora_config = LoraConfig(\n    r={lora_r},\n    lora_alpha={lora_alpha},\n    target_modules=["q_proj", "v_proj"],\n    lora_dropout={lora_dropout},\n    bias="none",\n    task_type=TaskType.CAUSAL_LM\n)\nmodel = get_peft_model(model, lora_config)\nmodel.print_trainable_parameters()'
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Tokenize for LLM Training\nfrom datasets import Dataset\n\ntrain_dataset = Dataset.from_dict({{'text': list(X_train), 'label': list(y_train)}})\nval_dataset = Dataset.from_dict({{'text': list(X_val), 'label': list(y_val)}})\n\ndef tokenize_fn(examples):\n    # Tokenize text\n    tokenized = tokenizer(examples['text'], padding='max_length', truncation=True, max_length=512)\n    # Add labels for causal LM training\n    tokenized['labels'] = tokenizer(examples['text'], padding='max_length', truncation=True, max_length=512)['input_ids']\n    return tokenized\n\ntrain_dataset = train_dataset.map(tokenize_fn, batched=True, remove_columns=['text', 'label'])\nval_dataset = val_dataset.map(tokenize_fn, batched=True, remove_columns=['text', 'label'])\nprint(f'✅ Tokenized {{len(train_dataset)}} train, {{len(val_dataset)}} val samples')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f"# Training Config\nfrom transformers import TrainingArguments, Trainer\n\ntraining_args = TrainingArguments(\n    output_dir=OUTPUT_DIR,\n    num_train_epochs={config.get('num_epochs', 3)},\n    per_device_train_batch_size={config.get('batch_size', 4)},\n    learning_rate={config.get('learning_rate', 2e-4)},\n    fp16=True,\n    logging_steps=10,\n    eval_strategy='epoch',\n    save_strategy='epoch',\n    load_best_model_at_end=True,\n    report_to='none'\n)\n\ntrainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=val_dataset)\nprint('✅ Training ready!')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Train\nimport time\nstart_time = time.time()\nprint('🚀 Starting training...')\n\ntrainer.train()\n\nelapsed = time.time() - start_time\nprint(f'\\n✅ Training complete! Time: {{elapsed/60:.2f}} minutes')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Save & Download\nmodel.save_pretrained(OUTPUT_DIR)\ntokenizer.save_pretrained(OUTPUT_DIR)\nprint(f'✅ Model saved to {OUTPUT_DIR}')\n\n!zip -r model.zip {OUTPUT_DIR}\nfrom google.colab import files\nfiles.download('model.zip')\nprint('📦 Download started!')"
-                    ],
-                },
-                {
-                    "cell_type": "markdown",
-                    "metadata": {},
-                    "source": [
-                        "## 🎉 Training Complete!\nYour fine-tuned model is ready. Extract model.zip and use it for inference."
-                    ],
-                },
-            ]
-        elif method == "qlora":
-            method_name = "QLoRA"
-            lora_r_qlora = config.get("lora_r", 8)
-            lora_alpha_qlora = config.get("lora_alpha", 16)
-            cells = [
-                {
-                    "cell_type": "markdown",
-                    "metadata": {},
-                    "source": [
-                        f"# QLoRA Fine-Tuning {model_name}\n\n**System2ML Pipeline Training** (4-bit Quantized)\n\n### Task: {task_type.capitalize()}\n{task_desc}\n\nQLoRA uses 4-bit quantization for memory-efficient training."
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Install Dependencies\n!pip install -q transformers datasets peft accelerate bitsandbytes torch\n!pip install -q scikit-learn pandas numpy\nprint('✅ Dependencies installed!')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f"# Configuration\nimport os\nimport json\nimport pandas as pd\nimport torch\nfrom datetime import datetime\n\nMODEL_NAME = \"{model_id}\"\nTRAINING_METHOD = \"qlora\"\nOUTPUT_DIR = \"/content/model_adapter\"\nMAX_BUDGET_USD = {config.get('max_budget', 5)}\n\nprint(f'🤖 Model: {{MODEL_NAME}}')\nprint(f'🔧 Method: {{TRAINING_METHOD}}')\nprint(f'💰 Budget: ${{MAX_BUDGET_USD}}')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Load Model with QLoRA (4-bit)\nfrom transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig\nfrom peft import LoraConfig, get_peft_model, TaskType\n\nbnb_config = BitsAndBytesConfig(\n    load_in_4bit=True,\n    bnb_4bit_quant_type='nf4',\n    bnb_4bit_compute_dtype=torch.float16,\n    bnb_4bit_use_double_quant=True\n)\n\nmodel = AutoModelForCausalLM.from_pretrained(MODEL_NAME, quantization_config=bnb_config, device_map='auto', trust_remote_code=True)\ntokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\n\nmodel.gradient_checkpointing_enable()\nprint('✅ Model loaded with 4-bit QLoRA')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Upload Dataset\nfrom google.colab import files\nprint('📁 Please upload your CSV dataset:')\nuploaded = files.upload()\nfilename = list(uploaded.keys())[0]\ndf = pd.read_csv(filename)\nprint(f'✅ Dataset loaded: {{len(df)}} rows, {{len(df.columns)}} columns')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Prepare Data for LLM Fine-tuning (Instruction Format)\nfrom sklearn.model_selection import train_test_split\n\n# Auto-detect label column\nlabel_candidates = ['label', 'target', 'y', 'class', 'output']\nlabel_col = next((c for c in df.columns if c.lower() in label_candidates), df.columns[-1])\nfeature_cols = [c for c in df.columns if c != label_col]\n\n# Create instruction-formatted text for LLM\ndef create_instruction_text(row):\n    features = \", \".join([f\"{{k}}={{v}}\" for k, v in row.items() if k != label_col])\n    label = row[label_col]\n    return f\"Input: {{features}}\\nOutput: {{label}}\"\n\ndf['instruction_text'] = df.apply(create_instruction_text, axis=1)\n\nX = df['instruction_text'].values\ny = df[label_col].values\nX_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)\n\nprint(f\"✅ Data prepared for LLM fine-tuning\")\nprint(f\"Example: {{X_train[0][:100]}}...\")\nprint(f\"✅ Split - Train: {{len(X_train)}}, Validation: {{len(X_val)}}\")"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f'# Configure LoRA (r={lora_r_qlora}, alpha={lora_alpha_qlora})\nlora_config = LoraConfig(\n    r={lora_r_qlora},\n    lora_alpha={lora_alpha_qlora},\n    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],\n    lora_dropout=0.1,\n    bias="none",\n    task_type=TaskType.CAUSAL_LM\n)\nmodel = get_peft_model(model, lora_config)\nmodel.print_trainable_parameters()'
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Tokenize for LLM Training\nfrom datasets import Dataset\n\ntrain_dataset = Dataset.from_dict({{'text': list(X_train), 'label': list(y_train)}})\nval_dataset = Dataset.from_dict({{'text': list(X_val), 'label': list(y_val)}})\n\ndef tokenize_fn(examples):\n    # Tokenize text\n    tokenized = tokenizer(examples['text'], padding='max_length', truncation=True, max_length=512)\n    # Add labels for causal LM training\n    tokenized['labels'] = tokenizer(examples['text'], padding='max_length', truncation=True, max_length=512)['input_ids']\n    return tokenized\n\ntrain_dataset = train_dataset.map(tokenize_fn, batched=True, remove_columns=['text', 'label'])\nval_dataset = val_dataset.map(tokenize_fn, batched=True, remove_columns=['text', 'label'])\nprint(f'✅ Tokenized {{len(train_dataset)}} train, {{len(val_dataset)}} val samples')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f"# Training Config\nfrom transformers import TrainingArguments, Trainer\n\ntraining_args = TrainingArguments(\n    output_dir=OUTPUT_DIR,\n    num_train_epochs={config.get('num_epochs', 3)},\n    per_device_train_batch_size={config.get('batch_size', 4)},\n    learning_rate={config.get('learning_rate', 2e-4)},\n    fp16=True,\n    optim='paged_adamw_32bit',\n    logging_steps=10,\n    eval_strategy='epoch',\n    save_strategy='epoch',\n    load_best_model_at_end=True,\n    report_to='none'\n)\n\ntrainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=val_dataset)\nprint('✅ Training ready!')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Train\nimport time\nstart_time = time.time()\nprint('🚀 Starting training...')\n\ntrainer.train()\n\nelapsed = time.time() - start_time\nprint(f'\\n✅ Training complete! Time: {{elapsed/60:.2f}} minutes')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Save & Download\nmodel.save_pretrained(OUTPUT_DIR)\ntokenizer.save_pretrained(OUTPUT_DIR)\nprint(f'✅ Model saved to {OUTPUT_DIR}')\n\n!zip -r model.zip {OUTPUT_DIR}\nfrom google.colab import files\nfiles.download('model.zip')\nprint('📦 Download started!')"
-                    ],
-                },
-                {
-                    "cell_type": "markdown",
-                    "metadata": {},
-                    "source": [
-                        "## 🎉 Training Complete!\nYour fine-tuned model is ready. Extract model.zip and use it for inference."
-                    ],
-                },
-            ]
-        else:  # full_ft
-            method_name = "Full Fine-Tuning"
-            cells = [
-                {
-                    "cell_type": "markdown",
-                    "metadata": {},
-                    "source": [
-                        f"# Full Fine-Tuning {model_name}\n\n**System2ML Pipeline Training**\n\n### Task: {task_type.capitalize()}\n{task_desc}\n\nFull fine-tuning updates all model parameters (requires more memory)."
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Install Dependencies\n!pip install -q transformers datasets accelerate torch\n!pip install -q scikit-learn pandas numpy\nprint('✅ Dependencies installed!')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f"# Configuration\nimport os\nimport json\nimport pandas as pd\nimport torch\nfrom datetime import datetime\n\nMODEL_NAME = \"{model_id}\"\nTRAINING_METHOD = \"full_ft\"\nOUTPUT_DIR = \"/content/model_adapter\"\nMAX_BUDGET_USD = {config.get('max_budget', 5)}\n\nprint(f'🤖 Model: {{MODEL_NAME}}')\nprint(f'🔧 Method: {{TRAINING_METHOD}}')\nprint(f'💰 Budget: ${{MAX_BUDGET_USD}}')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Upload Dataset\nfrom google.colab import files\nprint('📁 Please upload your CSV dataset:')\nuploaded = files.upload()\nfilename = list(uploaded.keys())[0]\ndf = pd.read_csv(filename)\nprint(f'✅ Dataset loaded: {{len(df)}} rows, {{len(df.columns)}} columns')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Prepare Data for LLM Fine-tuning (Instruction Format)\nfrom sklearn.model_selection import train_test_split\n\n# Auto-detect label column\nlabel_candidates = ['label', 'target', 'y', 'class', 'output']\nlabel_col = next((c for c in df.columns if c.lower() in label_candidates), df.columns[-1])\nfeature_cols = [c for c in df.columns if c != label_col]\n\n# Create instruction-formatted text for LLM\ndef create_instruction_text(row):\n    features = \", \".join([f\"{{k}}={{v}}\" for k, v in row.items() if k != label_col])\n    label = row[label_col]\n    return f\"Input: {{features}}\\nOutput: {{label}}\"\n\ndf['instruction_text'] = df.apply(create_instruction_text, axis=1)\n\nX = df['instruction_text'].values\ny = df[label_col].values\nX_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)\n\nprint(f\"✅ Data prepared for LLM fine-tuning\")\nprint(f\"Example: {{X_train[0][:100]}}...\")\nprint(f\"✅ Split - Train: {{len(X_train)}}, Validation: {{len(X_val)}}\")"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Load Base Model\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\n\nmodel = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map='auto', torch_dtype=torch.float16, trust_remote_code=True)\ntokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nprint('✅ Model loaded')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Tokenize for LLM Training\nfrom datasets import Dataset\n\ntrain_dataset = Dataset.from_dict({{'text': list(X_train), 'label': list(y_train)}})\nval_dataset = Dataset.from_dict({{'text': list(X_val), 'label': list(y_val)}})\n\ndef tokenize_fn(examples):\n    # Tokenize text\n    tokenized = tokenizer(examples['text'], padding='max_length', truncation=True, max_length=512)\n    # Add labels for causal LM training\n    tokenized['labels'] = tokenizer(examples['text'], padding='max_length', truncation=True, max_length=512)['input_ids']\n    return tokenized\n\ntrain_dataset = train_dataset.map(tokenize_fn, batched=True, remove_columns=['text', 'label'])\nval_dataset = val_dataset.map(tokenize_fn, batched=True, remove_columns=['text', 'label'])\nprint(f'✅ Tokenized {{len(train_dataset)}} train, {{len(val_dataset)}} val samples')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        f"# Training Config\nfrom transformers import TrainingArguments, Trainer\n\ntraining_args = TrainingArguments(\n    output_dir=OUTPUT_DIR,\n    num_train_epochs={config.get('num_epochs', 3)},\n    per_device_train_batch_size={config.get('batch_size', 2)},\n    learning_rate={config.get('learning_rate', 2e-4)},\n    fp16=True,\n    logging_steps=10,\n    eval_strategy='epoch',\n    save_strategy='epoch',\n    load_best_model_at_end=True,\n    report_to='none'\n)\n\ntrainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=val_dataset)\nprint('✅ Training ready!')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Train\nimport time\nstart_time = time.time()\nprint('🚀 Starting training...')\n\ntrainer.train()\n\nelapsed = time.time() - start_time\nprint(f'\\n✅ Training complete! Time: {{elapsed/60:.2f}} minutes')"
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "execution_count": None,
-                    "metadata": {},
-                    "outputs": [],
-                    "source": [
-                        "# Save & Download\nmodel.save_pretrained(OUTPUT_DIR)\ntokenizer.save_pretrained(OUTPUT_DIR)\nprint(f'✅ Model saved to {OUTPUT_DIR}')\n\n!zip -r model.zip {OUTPUT_DIR}\nfrom google.colab import files\nfiles.download('model.zip')\nprint('📦 Download started!')"
-                    ],
-                },
-                {
-                    "cell_type": "markdown",
-                    "metadata": {},
-                    "source": [
-                        "## 🎉 Training Complete!\nYour fine-tuned model is ready. Extract model.zip and use it for inference."
-                    ],
-                },
-            ]
-
-        notebook = {
-            "cells": cells,
-            "metadata": {
-                "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
-                "language_info": {"name": "python", "version": "3.10.0"},
-            },
-            "nbformat": 4,
-            "nbformat_minor": 4,
-        }
-
-        return json.dumps(notebook, indent=2)
+        return notebook_json
 
     def create_job(self, config: Dict[str, Any]) -> str:
         """Create a new training job"""
@@ -856,7 +530,9 @@ class ColabTrainingService:
         """Get job status"""
         return self.jobs.get(job_id)
 
-    def update_job_status(self, job_id: str, status: str, results: Any = None, error: str = None):
+    def update_job_status(
+        self, job_id: str, status: str, results: Any = None, error: Optional[str] = None
+    ):
         """Update job status"""
         if job_id in self.jobs:
             self.jobs[job_id]["status"] = status
@@ -917,6 +593,8 @@ def create_training_job(
 
     # For demo purposes - in production this would actually create a Colab instance
     job = colab_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=500, detail="Job not found after creation")
     job["notebook_json"] = notebook_json
     job["colab_link"] = f"https://colab.research.google.com/#create=true"
     job["status"] = "ready"

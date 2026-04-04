@@ -13,6 +13,7 @@ import json
 import logging
 import os
 from typing import Any, Dict, Optional, Tuple
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,9 @@ class AINotebookGenerator:
     def __init__(self):
         self.ollama_available = self._check_ollama()
         self.groq_available = self._check_groq()
+        self.openrouter_available = self._check_openrouter()
         self._groq_client = None
+        self._openrouter_client = None
 
     def _check_ollama(self) -> bool:
         """Check if Ollama is running locally."""
@@ -43,6 +46,10 @@ class AINotebookGenerator:
         """Check if Groq API key is configured."""
         return bool(os.environ.get("GROQ_API_KEY", ""))
 
+    def _check_openrouter(self) -> bool:
+        """Check if OpenRouter API key is configured."""
+        return bool(os.environ.get("OPENROUTER_API_KEY", ""))
+
     def _get_groq_client(self):
         """Lazy-load Groq client."""
         if self._groq_client is None:
@@ -55,74 +62,127 @@ class AINotebookGenerator:
                 logger.warning(f"Failed to initialize Groq client: {e}")
         return self._groq_client
 
+    def _get_openrouter_client(self):
+        """Lazy-load OpenRouter client."""
+        if self._openrouter_client is None:
+            try:
+                api_key = os.environ.get("OPENROUTER_API_KEY", "")
+                self._openrouter_client = OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=api_key,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenRouter client: {e}")
+        return self._openrouter_client
+
     def generate_notebook(
         self,
         config: Dict[str, Any],
-        prefer_local: bool = True,
+        prefer_local: bool = False,
     ) -> Tuple[str, str]:
         """
         Generate notebook using AI backends.
 
-        Args:
-            config: Training configuration
-            prefer_local: If True, try Ollama first. If False, try Groq first.
-
-        Returns:
-            Tuple of (notebook_json, generation_method)
-            generation_method: "ollama" | "groq" | "template" | "error"
+        Prioritizes speed (Groq) or quality (OpenRouter) over local (Ollama) unless requested.
         """
         # Build the prompt
         prompt = self._build_prompt(config)
 
-        # Try backends in order based on preference
-        if prefer_local and self.ollama_available:
-            result = self._generate_ollama(prompt, config)
+        # Try backends in order of quality (OpenRouter first), then speed (Groq), then local (Ollama)
+        # 1. OpenRouter (High quality)
+        if self.openrouter_available:
+            result = self._generate_openrouter(prompt, config)
             if result:
-                logger.info("Notebook generated via Ollama (local)")
-                return result, "ollama"
+                logger.info("Notebook generated via OpenRouter (Highest Quality)")
+                return result, "openrouter"
 
+        # 2. Groq (Fast)
         if self.groq_available:
             result = self._generate_groq(prompt, config)
             if result:
-                logger.info("Notebook generated via Groq (cloud)")
+                logger.info("Notebook generated via Groq (Fast)")
                 return result, "groq"
 
-        # Try Ollama as fallback if prefer_local was False
-        if not prefer_local and self.ollama_available:
+        # 3. Ollama (Local)
+        if self.ollama_available:
             result = self._generate_ollama(prompt, config)
             if result:
-                logger.info("Notebook generated via Ollama (fallback)")
+                logger.info("Notebook generated via Ollama (Local)")
                 return result, "ollama"
 
-        # All AI backends failed, return empty for template fallback
-        logger.warning("All AI backends failed, will use template")
-        return "", "error"
+        # All AI backends failed
+        logger.error("All AI backends failed")
+        raise RuntimeError("AI notebook generation failed: no backend succeeded")
 
     def _build_prompt(self, config: Dict[str, Any]) -> str:
-        """Build the prompt for AI notebook generation."""
+        """Build a comprehensive prompt for a 'perfect' AI notebook."""
         model_id = config.get("model_id", "meta-llama/Llama-3.1-8B-Instruct")
         method = config.get("method", "lora").upper()
-        use_unsloth = config.get("use_unsloth", False)
 
-        prompt = f"""Generate a Google Colab notebook for fine-tuning {model_id} using {method} method.
+        # Determine if Unsloth is recommended
+        use_unsloth = config.get(
+            "use_unsloth", any(m in model_id.lower() for m in ["llama", "mistral", "gemma", "phi"])
+        )
 
-Requirements:
+        # Dataset Context
+        dataset = config.get("dataset", {})
+        ds_name = config.get("dataset_name", "dataset")
+        ds_type = dataset.get("type", "tabular")
+        ds_rows = dataset.get("rows", "unknown")
+        ds_cols = dataset.get("columns", []) or dataset.get("features_count", "unknown")
+        data_types = dataset.get("data_types", {})
+        label_col = dataset.get("label_column", "unknown")
+
+        # Hyperparameters
+        epochs = config.get("num_epochs", 3)
+        batch_size = config.get("batch_size", 4)
+        lr = config.get("learning_rate", 2e-4)
+
+        prompt = f"""You are an expert Machine Learning Engineer. Generate a PERFECT, production-ready Google Colab notebook for fine-tuning {model_id} using {method}.
+
+PROJECT CONTEXT:
+- Model: {model_id}
 - Method: {method}
-- Unsloth: {"Yes - 2x faster training" if use_unsloth else "No"}
-- Dataset: User will upload CSV
-- Output: Save adapter to /content/adapter
+- Dataset: {ds_name} ({ds_rows} rows, {ds_cols} columns)
+- Data Types: {json.dumps(data_types)}
+- Label Column: {label_col}
+- Target Platform: Google Colab (T4 GPU)
+- Optimization: {"USE UNSLOTH (unsloth.ai) for 2x-4x speedup and 70% less memory usage" if use_unsloth else "Standard HuggingFace Transformers + PEFT"}
 
-Generate ONLY a JSON notebook with these exact cells:
-1. Markdown header with title and configuration
-2. Code cell: Install dependencies (transformers, datasets, peft, accelerate, bitsandbytes, torch)
-3. Code cell: Load model and tokenizer with quantization if QLoRA
-4. Code cell: Load and prepare dataset (user uploads CSV)
-5. Code cell: Configure and apply LoRA adapters
-6. Code cell: Train with SFTTrainer
-7. Code cell: Save model and create download
+REQUIRED SECTIONS & FEATURES:
+1. HEADER: Professional title, detailed table of contents, and configuration overview.
+2. INSTALLATION: Optimized pip installs (quiet mode). If Unsloth is used, use the official Unsloth install script.
+3. DATA LOADING: Handle CSV upload from local machine. Include robust error handling and data profiling (head, info, null checks).
+4. PREPROCESSING: 
+   - For Tabular: Handle categorical encoding and normalization.
+   - For Text: Professional ChatML/Instruct prompt formatting.
+   - Smart split into Train/Validation sets.
+5. MODEL SETUP:
+   - Load in 4-bit/8-bit (QLoRA) for memory efficiency.
+   - Configure LoRA/QLoRA adapters (r=16, alpha=32).
+   - Use gradient checkpointing.
+6. TRAINING:
+   - Use `SFTTrainer` from `trl` if applicable.
+   - Configure optimized `TrainingArguments`: epochs={epochs}, batch={batch_size}, lr={lr}.
+   - Include logging (WandB or TensorBoard support).
+7. VISUALIZATION: Use matplotlib/seaborn to plot training loss and accuracy.
+8. EXPORT: Save the adapter, the merged model (optional), and create a ZIP for easy download.
+9. INFERENCE: Include a "Quick Test" cell to run the fine-tuned model on a sample input.
 
-Return ONLY valid JSON, no markdown, no explanations. Format:
-{{"cells": [{{"cell_type": "markdown"|"code", "source": "..."}}]}}
+OUTPUT FORMAT:
+Return ONLY a valid Jupyter Notebook JSON object.
+Ensure ALL code cells are complete, bug-free, and use modern best practices.
+DO NOT include markdown wrappers like ```json.
+
+{{
+  "cells": [ ... ],
+  "metadata": {{
+    "colab": {{ "accelerator": "GPU", "gpuType": "T4" }},
+    "kernelspec": {{ "display_name": "Python 3", "language": "python", "name": "python3" }}
+  }},
+  "nbformat": 4,
+  "nbformat_minor": 0
+}}
 """
         return prompt
 
@@ -136,13 +196,14 @@ Return ONLY valid JSON, no markdown, no explanations. Format:
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
 
-                # Try smaller models first (to avoid memory issues)
+                # Try gpt-oss:20b first as requested
                 model_preferences = [
-                    "mistral:latest",
+                    "gpt-oss:20b",
+                    "gpt-oss",
+                    "llama3.3-70b",
+                    "llama3.1:70b",
                     "llama3.1:8b",
-                    "llama3:8b",
-                    "phi3:14b",
-                    "gemma:7b",
+                    "mistral:latest",
                 ]
 
                 # Find first available model
@@ -162,7 +223,7 @@ Return ONLY valid JSON, no markdown, no explanations. Format:
 
                 logger.info(f"Using Ollama model: {model}")
 
-                # Don't use format=json to reduce memory usage
+                # Use shorter timeout for Ollama to avoid blocking
                 response = requests.post(
                     "http://localhost:11434/api/generate",
                     json={
@@ -170,7 +231,7 @@ Return ONLY valid JSON, no markdown, no explanations. Format:
                         "prompt": prompt,
                         "stream": False,
                     },
-                    timeout=180,
+                    timeout=60,  # Reduced to 60s
                 )
 
                 if response.status_code == 200:
@@ -183,9 +244,35 @@ Return ONLY valid JSON, no markdown, no explanations. Format:
                     )
 
         except requests.exceptions.Timeout:
-            logger.error("Ollama request timed out")
+            logger.error("Ollama request timed out (60s)")
         except Exception as e:
             logger.error(f"Ollama generation failed: {e}")
+
+        return None
+
+    def _generate_openrouter(self, prompt: str, config: Dict[str, Any]) -> Optional[str]:
+        """Generate notebook using OpenRouter API."""
+        try:
+            client = self._get_openrouter_client()
+            if not client:
+                return None
+
+            model = config.get("openrouter_model", "meta-llama/llama-3.3-70b-instruct")
+
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=4000,
+                timeout=90,  # 90s timeout for complex generation
+            )
+
+            if response.choices:
+                text = response.choices[0].message.content
+                return self._parse_ai_response(text)
+
+        except Exception as e:
+            logger.error(f"OpenRouter generation failed: {e}")
 
         return None
 
@@ -196,7 +283,7 @@ Return ONLY valid JSON, no markdown, no explanations. Format:
             if not client:
                 return None
 
-            model = config.get("groq_model", "llama-3.1-70b-versatile")
+            model = config.get("groq_model", "llama-3.3-70b-versatile")
 
             response = client.chat.completions.create(
                 model=model,
@@ -204,6 +291,7 @@ Return ONLY valid JSON, no markdown, no explanations. Format:
                 temperature=0.3,
                 max_tokens=4000,
                 response_format={"type": "json_object"},
+                timeout=45,  # Groq is fast, 45s is plenty
             )
 
             if response.choices:
@@ -252,6 +340,7 @@ Return ONLY valid JSON, no markdown, no explanations. Format:
         return {
             "ollama": self.ollama_available,
             "groq": self.groq_available,
+            "openrouter": self.openrouter_available,
         }
 
 

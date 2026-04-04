@@ -23,12 +23,18 @@ interface ChartDataPoint {
   status?: string
 }
 
-export function RunsChart() {
-  const [data, setData] = useState<RunData[]>([])
-  const [loading, setLoading] = useState(true)
+interface RunsChartProps {
+  initialData?: RunData[]
+}
+
+export function RunsChart({ initialData }: RunsChartProps) {
+  const [data, setData] = useState<RunData[]>(initialData || [])
+  const [loading, setLoading] = useState(!initialData)
   const [error, setError] = useState(false)
 
   useEffect(() => {
+    if (initialData) return
+
     async function fetchRuns() {
       try {
         const res = await fetch(`${API_BASE}/api/runs`, { cache: 'no-store' })
@@ -45,7 +51,7 @@ export function RunsChart() {
       }
     }
     fetchRuns()
-  }, [])
+  }, [initialData])
 
   const chartData: ChartDataPoint[] = data.slice(0, 10).map((run) => ({
     name: run.pipeline_name?.slice(0, 15) || 'Unknown',

@@ -1,8 +1,9 @@
+import re
+
 import sys
-import builtins
 from fastapi.testclient import TestClient as _TestClient
 
-builtins.TestClient = _TestClient
+import builtins
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -218,7 +219,7 @@ if HAS_FINETUNING:
     app.include_router(finetuning_router)
 
 
-from fastapi import HTTPException
+# from fastapi import HTTPException  # already imported earlier
 
 
 @app.exception_handler(Exception)
@@ -308,8 +309,19 @@ def register(request: Request, register_data: RegisterRequest):
     if not register_data.email or not register_data.password or not register_data.name:
         raise HTTPException(status_code=400, detail="All fields are required")
 
-    if len(register_data.password) < 4:
-        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    # Validate email format
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", register_data.email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    # Validate password strength
+    if (
+        len(register_data.password) < 8
+        or not re.search(r"[A-Za-z]", register_data.password)
+        or not re.search(r"\d", register_data.password)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters, include letters and numbers",
+        )
 
     user = UserStore.create(register_data.email, register_data.password, register_data.name)
 
@@ -2519,7 +2531,10 @@ def create_colab_training(request: ColabTrainingRequest):
             "dataset_format": training_target.get("dataset_format", "alpaca"),
         }
 
-        notebook_json = ai.generate_notebook(config)
+        from agent.colab_service import ColabTrainingService
+
+        svc = ColabTrainingService()
+        notebook_json = svc.create_notebook(config, use_ai=True, prefer_local=False)
 
         job_id = f"job_{uuid.uuid4().hex[:8]}"
 

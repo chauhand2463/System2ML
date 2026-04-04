@@ -9,6 +9,7 @@ import logging
 import time
 from typing import Dict, Any, Optional, List
 from groq import Groq
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +19,23 @@ class AIDesignService:
 
     def __init__(self, api_key: Optional[str] = None, prefer_backend: str = "auto"):
         self.api_key = api_key or os.environ.get("GROQ_API_KEY", "")
+        self.openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
         self.groq_client = None
+        self.openrouter_client = None
         self.ollama_available = False
         self.ollama_models: List[str] = []
         self.ollama_model = "llama3.1:8b"
+        
         self._check_ollama()
+        
         if self.api_key:
             self.groq_client = Groq(api_key=self.api_key)
+            
+        if self.openrouter_key:
+            self.openrouter_client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.openrouter_key,
+            )
 
         self.prefer_backend = prefer_backend
         logger.info(f"[AIDesignService] Initialized with prefer_backend={prefer_backend}")
@@ -33,14 +44,14 @@ class AIDesignService:
         """Select best available Ollama model - extracted helper"""
         # Priority order: prefer larger models for complex tasks
         preferred = [
+            "gpt-oss:20b",
+            "gpt-oss",
             "llama3.1:70b",
             "llama3.1:8b",
             "llama3:70b",
             "llama3:8b",
             "mistral",
             "orca-mini",
-            "gpt-oss:20b",
-            "gpt-oss",
         ]
 
         # Try exact match first
@@ -82,7 +93,14 @@ class AIDesignService:
         """Generate AI-powered pipeline design"""
         prompt = self._build_pipeline_prompt(dataset_profile, constraints, infra_context)
 
-        # Use backend based on preference
+        # 1. Try OpenRouter (High quality cloud)
+        if self.openrouter_client:
+            result = self._generate_with_openrouter(prompt, dataset_profile, constraints)
+            if result:
+                logger.info("[Pipeline] Generated via OpenRouter")
+                return result
+
+        # 2. Try Ollama (Local/Self-hosted)
         if self.prefer_backend == "ollama" or (
             self.prefer_backend == "auto" and self.ollama_available
         ):
@@ -91,6 +109,7 @@ class AIDesignService:
                 logger.info("[Pipeline] Generated via Ollama")
                 return result
 
+        # 3. Try Groq (Fast cloud fallback)
         if self.prefer_backend == "groq" or (self.prefer_backend == "auto" and self.groq_client):
             result = self._generate_with_groq(prompt, dataset_profile, constraints)
             if result:
@@ -99,6 +118,26 @@ class AIDesignService:
 
         logger.warning("[Pipeline] No AI backend available, using fallback")
         return self._generate_fallback(dataset_profile, constraints)
+
+    def _generate_with_openrouter(
+        self, prompt: str, dataset: Dict = None, constraints: Dict = None
+    ) -> Optional[Dict[str, Any]]:
+        """Generate using OpenRouter with high-capacity models"""
+        dataset = dataset or {}
+        constraints = constraints or {}
+
+        try:
+            response = self.openrouter_client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=3000,
+            )
+            content = response.choices[0].message.content
+            return self._parse_ai_response(content, dataset, constraints)
+        except Exception as e:
+            logger.error(f"[OpenRouter] Error: {e}")
+            return None
 
     def _build_pipeline_prompt(self, dataset: Dict, constraints: Dict, infra: Dict = None) -> str:
         """Build prompt for pipeline generation"""
@@ -214,7 +253,7 @@ Return ONLY valid JSON in this exact format:
 
         try:
             response = self.groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",  # Better model for structured output
+                model="llama-3.3-70b-versatile",  # Updated from deprecated 3.1 70b
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=3000,
@@ -312,32 +351,39 @@ Return ONLY valid JSON in this exact format:
         }
 
     def generate_notebook(self, config: Dict[str, Any]) -> str:
-        """Generate AI-powered Colab notebook using Ollama (preferred) or Groq"""
-        prompt = self._build_notebook_prompt(config)
+        """Generate AI-powered Colab notebook using the specialized notebook generator"""
+        from agent.notebook.ai_generator import get_ai_generator
+        
+        ai_gen = get_ai_generator()
+        result, method = ai_gen.generate_notebook(config, prefer_local=False)
+        
+        if result:
+            logger.info(f"[Notebook] Generated via {method}")
+            return result
 
-        # Try Ollama first with retry
-        if self.ollama_available:
-            result = self._generate_notebook_with_ollama(prompt)
-            if result and result != "{}":
-                logger.info("[Notebook] Generated via Ollama")
-                return result
-
-        # Fallback to Groq cloud
-        if self.groq_client:
-            result = self._generate_notebook_with_groq(prompt)
-            if result and result != "{}":
-                logger.info("[Notebook] Generated via Groq")
-                return result
-
-        # Fallback to template
         logger.warning("[Notebook] AI generation failed, using template fallback")
         return self._generate_notebook_fallback(config)
+
+    def _generate_notebook_with_openrouter(self, prompt: str) -> str:
+        """Generate notebook using OpenRouter"""
+        try:
+            response = self.openrouter_client.chat.completions.create(
+                model="meta-llama/llama-3.3-70b-instruct",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=4000,
+            )
+            content = response.choices[0].message.content
+            return self._parse_notebook_response(content)
+        except Exception as e:
+            logger.error(f"[OpenRouter Notebook] Error: {e}")
+            return ""
 
     def _generate_notebook_with_groq(self, prompt: str) -> str:
         """Generate notebook using Groq cloud API"""
         try:
             response = self.groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=4000,
@@ -484,7 +530,7 @@ Generate COMPLETE valid JSON notebook. Return ONLY JSON starting with {{ and end
                         "prompt": full_prompt,
                         "stream": False,
                     },
-                    timeout=300,
+                    timeout=600, # Increased timeout for large models
                 )
                 if response.status_code == 200:
                     result = response.json()
@@ -507,6 +553,11 @@ Generate COMPLETE valid JSON notebook. Return ONLY JSON starting with {{ and end
 
     def _select_best_llama_model(self, available: List[str]) -> str:
         """Select best Llama model from available list"""
+        # Prefer gpt-oss:20b as requested
+        for model in available:
+            if "gpt-oss:20b" in model.lower() or "gpt-oss" in model.lower():
+                return model
+        
         # Prefer larger models
         for model in available:
             if "70b" in model.lower():

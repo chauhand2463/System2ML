@@ -62,11 +62,8 @@ async function getData() {
 export default async function DashboardPage() {
   const { pipelines, runs, activities, metrics, failures, isApiConnected } = await getData()
 
-  const activePipelines = pipelines.filter((p: any) => p.status === 'active').length
-  const designedPipelines = pipelines.filter((p: any) => p.status === 'designed').length
   const totalPipelines = pipelines.length
   const completedRuns = runs.filter((r: any) => r.status === 'completed').length
-  const failedRuns = runs.filter((r: any) => r.status === 'failed').length
   const unresolvedFailures = failures.filter((f: any) => !f.is_resolved).length
   const successRate = runs.length > 0 ? ((completedRuns / runs.length) * 100).toFixed(1) : "0"
 
@@ -230,10 +227,10 @@ export default async function DashboardPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Pipeline Status Chart */}
-            <PipelineStatusChart />
+            <PipelineStatusChart initialData={pipelines} />
 
             {/* Runs Chart */}
-            <RunsChart />
+            <RunsChart initialData={runs} />
 
             {/* Metrics */}
             <div className="rounded-2xl bg-neutral-900/50 backdrop-blur-xl border border-white/5 p-6">

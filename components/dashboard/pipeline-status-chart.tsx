@@ -19,26 +19,36 @@ const COLORS = {
   archived: '#6b7280'
 }
 
-export function PipelineStatusChart() {
-  const [data, setData] = useState<PipelineData[]>([])
-  const [loading, setLoading] = useState(true)
+interface PipelineStatusChartProps {
+  initialData?: PipelineData[]
+}
+
+export function PipelineStatusChart({ initialData }: PipelineStatusChartProps) {
+  const [data, setData] = useState<PipelineData[]>(initialData || [])
+  const [loading, setLoading] = useState(!initialData)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
+    if (initialData) return
+
     async function fetchPipelines() {
       try {
         const res = await fetch(`${API_BASE}/api/pipelines`, { cache: 'no-store' })
         if (res.ok) {
           const json = await res.json()
           setData(json.pipelines || [])
+        } else {
+          setError(true)
         }
       } catch (e) {
         console.error('Error fetching pipelines:', e)
+        setError(true)
       } finally {
         setLoading(false)
       }
     }
     fetchPipelines()
-  }, [])
+  }, [initialData])
 
   const statusCounts = data.reduce((acc, pipeline) => {
     const status = pipeline.status || 'designed'
@@ -67,14 +77,14 @@ export function PipelineStatusChart() {
     )
   }
 
-  if (chartData.length === 0) {
+  if (error || chartData.length === 0) {
     return (
       <Card className="bg-neutral-900/50 backdrop-blur-xl border border-white/5">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-neutral-400">Pipeline Status</CardTitle>
         </CardHeader>
         <CardContent className="h-40 flex items-center justify-center">
-          <p className="text-neutral-500 text-sm">No pipelines yet</p>
+          <p className="text-neutral-500 text-sm">{error ? 'Connection error' : 'No pipelines yet'}</p>
         </CardContent>
       </Card>
     )

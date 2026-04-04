@@ -2,7 +2,7 @@
 # Public API for notebook generation
 
 from .generator import NotebookGenerator
-from .validators import validate_notebook, validate_config
+from agent.notebook.validators import validate_notebook, validate_config
 
 __all__ = [
     "NotebookGenerator",
