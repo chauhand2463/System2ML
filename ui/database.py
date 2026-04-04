@@ -32,6 +32,9 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
+    # Enable foreign keys
+    c.execute("PRAGMA foreign_keys = ON")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +43,7 @@ def init_db():
             name TEXT NOT NULL,
             avatar TEXT,
             provider TEXT DEFAULT 'email',
+            role TEXT DEFAULT 'viewer',
             is_active INTEGER DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -209,6 +213,21 @@ def init_db():
     """)
 
     c.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            owner_id INTEGER,
+            status TEXT DEFAULT 'draft',
+            budget_limit REAL DEFAULT 100,
+            current_spend REAL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (owner_id) REFERENCES users(id)
+        )
+    """)
+
+    c.execute("""
         CREATE TABLE IF NOT EXISTS budget_alerts (
             id TEXT PRIMARY KEY,
             project_id TEXT NOT NULL,
@@ -221,21 +240,6 @@ def init_db():
             last_triggered_at TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (project_id) REFERENCES projects(id)
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            name TEXT NOT NULL,
-            avatar TEXT,
-            provider TEXT DEFAULT 'email',
-            role TEXT DEFAULT 'viewer',
-            is_active INTEGER DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
         )
     """)
 
@@ -613,6 +617,18 @@ class UserStore:
         conn.commit()
         conn.close()
 
+    @staticmethod
+    def update_role(user_id: int, role: str) -> bool:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
+            (role, datetime.utcnow().isoformat(), user_id),
+        )
+        conn.commit()
+        conn.close()
+        return True
+
 
 def get_user_roles():
     return ["admin", "data_scientist", "viewer"]
@@ -645,71 +661,6 @@ def can_user_perform_action(user_role: str, action: str) -> bool:
         "viewer": ["view_own_projects", "comment_pipeline", "view_analytics"],
     }
     return action in permissions.get(user_role, [])
-
-
-class UserStore:
-    @staticmethod
-    def create(
-        email: str, password: str, name: str, provider: str = "email", role: str = "viewer"
-    ) -> int:
-        conn = get_db()
-        c = conn.cursor()
-        now = datetime.utcnow().isoformat()
-
-        c.execute(
-            "INSERT INTO users (email, password_hash, name, provider, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (email, hash_password(password), name, provider, role, now, now),
-        )
-        conn.commit()
-        user_id = c.lastrowid
-        conn.close()
-        return user_id
-
-    @staticmethod
-    def get_by_email(email: str):
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE email = ?", (email,))
-        row = c.fetchone()
-        conn.close()
-        if row:
-            return dict(zip([col[0] for col in c.description], row))
-        return None
-
-    @staticmethod
-    def get_by_id(user_id: int):
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        row = c.fetchone()
-        conn.close()
-        if row:
-            return dict(zip([col[0] for col in c.description], row))
-        return None
-
-    @staticmethod
-    def update_role(user_id: int, role: str) -> bool:
-        if role not in get_user_roles():
-            return False
-        conn = get_db()
-        c = conn.cursor()
-        c.execute(
-            "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
-            (role, datetime.utcnow().isoformat(), user_id),
-        )
-        conn.commit()
-        conn.close()
-        return True
-
-    @staticmethod
-    def get_all():
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT id, email, name, role, provider, is_active, created_at FROM users")
-        rows = c.fetchall()
-        conn.close()
-        columns = [col[0] for col in c.description]
-        return [dict(zip(columns, row)) for row in rows]
 
 
 class SessionStore:

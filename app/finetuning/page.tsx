@@ -36,11 +36,13 @@ interface ModelConfig {
 
 interface TrainingConfig {
   use_ollama: boolean
+  use_unsloth: boolean
   model: ModelConfig | null
   method: 'lora' | 'qlora' | 'full_ft'
   task_type: 'causal_lm' | 'seq2seq' | 'classification' | 'regression'
   dataset_format: 'alpaca' | 'sharegpt' | 'raw_text' | 'csv' | 'jsonl'
   dataset_url: string
+  dataset_file: File | null
   dataset_preview: any[]
   epochs: number
   batch_size: number
@@ -385,6 +387,7 @@ function generateColabNotebook(config: TrainingConfig): object {
   const modelId = config.use_ollama ? (config.model?.ollama_id || config.model?.hf_id) : (config.model?.hf_id || 'meta-llama/Meta-Llama-3.1-8B-Instruct');
   const isQLoRA = method === 'qlora'
   const isLoRA = method === 'lora' || method === 'qlora'
+  const hasDataset = config.dataset_file !== null
 
   const cells = [
     // Cell 1: Title
@@ -413,13 +416,22 @@ function generateColabNotebook(config: TrainingConfig): object {
         '# @title 📦 Install Dependencies { display-mode: "form" }\n',
         '# This installs all required packages for fine-tuning\n',
         '!pip install -q --upgrade pip\n',
-        '!pip install -q transformers==4.44.0\n',
-        '!pip install -q datasets==2.20.0\n',
-        '!pip install -q peft==0.12.0\n',
-        '!pip install -q trl==0.9.6\n',
-        '!pip install -q accelerate==0.33.0\n',
-        '!pip install -q bitsandbytes==0.43.3\n',
-        '!pip install -q huggingface_hub\n',
+        ...(config.use_unsloth 
+          ? [
+            '# 🚀 Unsloth for 2x faster training, 60% less VRAM\n',
+            '!pip install -q "unsloth@https://github.com/unslothai/unsloth/releases/download/v2024.11.06/unsloth-2024.11.06-py3-none-any.whl"\n',
+            '!pip install -q "unsloth[llama]@https://github.com/unslothai/unsloth/releases/download/v2024.11.06/unsloth-2024.11.06-py3-none-any.whl#egg=unsloth[llama]" 2>/dev/null || pip install unsloth\n',
+          ]
+          : [
+            '!pip install -q transformers==4.44.0\n',
+            '!pip install -q datasets==2.20.0\n',
+            '!pip install -q peft==0.12.0\n',
+            '!pip install -q trl==0.9.6\n',
+            '!pip install -q accelerate==0.33.0\n',
+            '!pip install -q bitsandbytes==0.43.3\n',
+            '!pip install -q huggingface_hub\n',
+          ]
+        ),
         ...(use_wandb ? ['!pip install -q wandb\n'] : []),
         'print("✅ All packages installed!")\n',
       ]
@@ -515,48 +527,75 @@ function generateColabNotebook(config: TrainingConfig): object {
         'print(f"  Epochs: {EPOCHS}, LR: {LEARNING_RATE}, Batch: {BATCH_SIZE}")\n',
       ]
     },
-    // Cell 6: Dataset
+    // Cell 6: Dataset with file upload
     {
       cell_type: 'code', execution_count: null, metadata: {}, outputs: [],
       source: [
         '# @title 📂 Load Dataset { display-mode: "form" }\n',
         '# Upload your dataset OR use a HuggingFace dataset\n\n',
         'from datasets import load_dataset\n',
-        'import json, pandas as pd\n\n',
-        '# ─── Option 1: Upload local file ───────────────────────────────\n',
-        '# from google.colab import files\n',
-        '# uploaded = files.upload()\n',
-        '# dataset_file = list(uploaded.keys())[0]\n\n',
-        '# ─── Option 2: Use HuggingFace dataset ─────────────────────────\n',
-        '# Uncomment and change to your dataset:\n',
-        '# dataset = load_dataset("tatsu-lab/alpaca", split="train")\n\n',
-        '# ─── Option 3: Create from scratch ─────────────────────────────\n',
-        '# Example with alpaca format (most common)\n',
+        'import json, pandas as pd\n',
+        'from google.colab import files\n\n',
+        '# ─── Option 1: Upload local file (RECOMMENDED) ───────────────────\n',
+        'print("📁 Upload your dataset file:")\n',
+        'uploaded = files.upload()\n',
+        'dataset_file = list(uploaded.keys())[0]\n',
+        'print(f"✅ Uploaded: {dataset_file}")\n\n',
+        '# Detect format from file extension\n',
+        'if dataset_file.endswith(\".csv\"):\n',
+        '    df = pd.read_csv(dataset_file)\n',
+        '    print(f"📊 Loaded CSV: {len(df)} rows, {len(df.columns)} columns")\n',
+        '    print(f"   Columns: {list(df.columns)}")\n',
+        'elif dataset_file.endswith(\".json\"):\n',
+        '    with open(dataset_file, \"r\") as f:\n',
+        '        data = json.load(f)\n',
+        '    if isinstance(data, list):\n',
+        '        df = pd.DataFrame(data)\n',
+        '    else:\n',
+        '        df = pd.DataFrame([data])\n',
+        '    print(f"📊 Loaded JSON: {len(df)} rows")\n',
+        'elif dataset_file.endswith(\".jsonl\"):\n',
+        '    df = pd.read_json(dataset_file, lines=True)\n',
+        '    print(f"📊 Loaded JSONL: {len(df)} rows")\n',
+        'else:\n',
+        '    raise ValueError(f"Unsupported file format: {dataset_file}")\n\n',
+        '# Auto-detect label column\n',
+        'label_candidates = ["label", "target", "y", "class", "output", "label_col"]\n',
+        'label_col = next((c for c in df.columns if c.lower() in label_candidates), None)\n',
+        'feature_cols = [c for c in df.columns if c != label_col]\n',
+        'print(f"   Label column: {label_col}")\n',
+        'print(f"   Features: {len(feature_cols)} columns")\n\n',
+        '# Convert to training format based on DATASET_FORMAT\n',
         `if DATASET_FORMAT == "alpaca":\n`,
         '    # Alpaca format: {"instruction": "...", "input": "...", "output": "..."}\n',
-        '    sample_data = [\n',
-        '        {"instruction": "Summarize the following text.", "input": "The cat sat on the mat.", "output": "A cat was on a mat."},\n',
-        '        {"instruction": "Translate to French.", "input": "Hello world", "output": "Bonjour le monde"},\n',
-        '    ]\n',
-        '    dataset = load_dataset("json", data_files={"train": "data.json"}, split="train") if False else None\n',
-        '    print("⚠️  Using sample data. Replace with your actual dataset!")\n',
-        '    \n',
-        '    # Format function for Alpaca\n',
-        '    def format_alpaca(example):\n',
-        '        if example.get("input"):\n',
-        '            prompt = f\'### Instruction:\\n{example["instruction"]}\\n\\n### Input:\\n{example["input"]}\\n\\n### Response:\\n{example["output"]}\'\n',
-        '        else:\n',
-        '            prompt = f\'### Instruction:\\n{example["instruction"]}\\n\\n### Response:\\n{example["output"]}\'\n',
-        '        return {"text": prompt}\n\n',
-        `elif DATASET_FORMAT == "sharegpt":\n`,
-        '    # ShareGPT format: {"conversations": [{"from": "human", "value": "..."}, {"from": "gpt", "value": "..."}]}\n',
-        '    def format_sharegpt(example):\n',
-        '        text = ""\n',
-        '        for turn in example["conversations"]:\n',
-        '            role = "User" if turn["from"] == "human" else "Assistant"\n',
-        '            text += f"{role}: {turn[\'value\']}\\n"\n',
-        '        return {"text": text.strip()}\n\n',
-        'print("✅ Dataset format configured!")\n',
+        '    def to_alpaca(row):\n',
+        '        instruction = "Complete this task based on the input features."\n',
+        '        input_str = ", ".join([f"{k}={v}" for k, v in row.items() if k != label_col])\n',
+        '        output_str = str(row.get(label_col, "")) if label_col else ""\n',
+        '        return {"instruction": instruction, "input": input_str, "output": output_str}\n',
+        '    alpaca_data = [to_alpaca(row) for _, row in df.iterrows()]\n',
+        '    # Save to file\n',
+        '    with open("train.json", "w") as f:\n',
+        '        json.dump(alpaca_data, f)\n',
+        '    dataset = load_dataset("json", data_files="train.json", split="train")\n',
+        `elif DATASET_FORMAT == "jsonl":\n`,
+        '    # JSONL format: {"text": "..."}\n',
+        '    def to_text(row):\n',
+        '        input_str = ", ".join([f"{k}={v}" for k, v in row.items() if k != label_col])\n',
+        '        output_str = str(row.get(label_col, "")) if label_col else ""\n',
+        '        return {"text": f"Input: {input_str} Output: {output_str}"}\n',
+        '    text_data = [to_text(row) for _, row in df.iterrows()]\n',
+        '    with open("train.jsonl", "w") as f:\n',
+        '        for item in text_data:\n',
+        '            f.write(json.dumps(item) + "\\n")\n',
+        '    dataset = load_dataset("json", data_files="train.jsonl", split="train")\n',
+        `elif DATASET_FORMAT == "csv":\n`,
+        '    dataset = load_dataset("csv", data_files=dataset_file, split="train")\n',
+        'else:\n',
+        '    # Default to CSV\n',
+        '    dataset = load_dataset("csv", data_files=dataset_file, split="train")\n\n',
+        'print(f"✅ Dataset loaded: {len(dataset)} samples")\n',
+        'print(f"   Format: {DATASET_FORMAT}")\n',
       ]
     },
     // Cell 7: Load Model
@@ -565,44 +604,64 @@ function generateColabNotebook(config: TrainingConfig): object {
       source: [
         '# @title 🤖 Load Model & Tokenizer { display-mode: "form" }\n',
         'import torch\n',
-        'from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig\n\n',
-        '# Quantization config for QLoRA\n',
-        isQLoRA ? [
-          'bnb_config = BitsAndBytesConfig(\n',
-          `    load_in_${quantization_bits || 4}bit=True,\n`,
-          `    bnb_${quantization_bits || 4}bit_quant_type="nf4",\n`,
-          `    bnb_${quantization_bits || 4}bit_compute_dtype=torch.bfloat16,\n`,
-          `    bnb_${quantization_bits || 4}bit_use_double_quant=True,\n`,
+        config.use_unsloth 
+          ? 'from unsloth import FastLanguageModel\n'
+          : 'from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig\n',
+        config.use_unsloth && isQLoRA ? [
+          '# 🚀 Using Unsloth for 2x faster training, 60% less VRAM\n',
+          'model, tokenizer = FastLanguageModel.from_pretrained(\n',
+          '    model_name=MODEL_ID,\n',
+          '    max_seq_length=MAX_SEQ_LENGTH,\n',
+          '    load_in_4bit=QUANT_4BIT,\n',
+          '    token=HF_TOKEN,\n',
+          '    trust_remote_code=True,\n',
           ')\n',
-          'model_kwargs = {"quantization_config": bnb_config}\n',
-        ].join('') : [
-          'model_kwargs = {}\n',
-          fp16 ? 'model_kwargs["torch_dtype"] = torch.float16\n' : '',
-          bf16 ? 'model_kwargs["torch_dtype"] = torch.bfloat16\n' : '',
+        ].join('') : config.use_unsloth ? [
+          '# 🚀 Using Unsloth for 2x faster training, 60% less VRAM\n',
+          'model, tokenizer = FastLanguageModel.from_pretrained(\n',
+          '    model_name=MODEL_ID,\n',
+          '    max_seq_length=MAX_SEQ_LENGTH,\n',
+          '    load_in_4bit=False,\n',
+          '    token=HF_TOKEN,\n',
+          '    trust_remote_code=True,\n',
+          ')\n',
+        ] : [
+          '# Quantization config for QLoRA\n',
+          isQLoRA ? [
+            'bnb_config = BitsAndBytesConfig(\n',
+            `    load_in_${quantization_bits || 4}bit=True,\n`,
+            `    bnb_${quantization_bits || 4}bit_quant_type="nf4",\n`,
+            `    bnb_${quantization_bits || 4}bit_compute_dtype=torch.bfloat16,\n`,
+            `    bnb_${quantization_bits || 4}bit_use_double_quant=True,\n`,
+            ')\n',
+            'model_kwargs = {"quantization_config": bnb_config}\n',
+          ].join('') : [
+            'model_kwargs = {}\n',
+            fp16 ? 'model_kwargs["torch_dtype"] = torch.float16\n' : '',
+            bf16 ? 'model_kwargs["torch_dtype"] = torch.bfloat16\n' : '',
+          ].join(''),
+          '\nprint(f"📥 Loading tokenizer: {MODEL_ID}")\n',
+          'tokenizer = AutoTokenizer.from_pretrained(\n',
+          '    MODEL_ID,\n',
+          '    token=HF_TOKEN,\n',
+          '    trust_remote_code=True\n',
+          ')\n',
+          'if tokenizer.pad_token is None:\n',
+          '    tokenizer.pad_token = tokenizer.eos_token\n',
+          '    tokenizer.pad_token_id = tokenizer.eos_token_id\n',
+          'tokenizer.padding_side = "right"\n\n',
+          'print(f"📥 Loading model: {MODEL_ID}")\n',
+          'model = AutoModelForCausalLM.from_pretrained(\n',
+          '    MODEL_ID,\n',
+          '    device_map="auto",\n',
+          '    token=HF_TOKEN,\n',
+          '    trust_remote_code=True,\n',
+          '    **model_kwargs\n',
+          ')\n',
+          'model.config.use_cache = False\n',
+          gradient_checkpointing ? 'model.gradient_checkpointing_enable()\n' : '',
         ].join(''),
-        '\nprint(f"📥 Loading tokenizer: {MODEL_ID}")\n',
-        'tokenizer = AutoTokenizer.from_pretrained(\n',
-        '    MODEL_ID,\n',
-        '    token=HF_TOKEN,\n',
-        '    trust_remote_code=True\n',
-        ')\n',
-        'if tokenizer.pad_token is None:\n',
-        '    tokenizer.pad_token = tokenizer.eos_token\n',
-        '    tokenizer.pad_token_id = tokenizer.eos_token_id\n',
-        'tokenizer.padding_side = "right"\n\n',
-        'print(f"📥 Loading model: {MODEL_ID}")\n',
-        'model = AutoModelForCausalLM.from_pretrained(\n',
-        '    MODEL_ID,\n',
-        '    device_map="auto",\n',
-        '    token=HF_TOKEN,\n',
-        '    trust_remote_code=True,\n',
-        '    **model_kwargs\n',
-        ')\n',
-        'model.config.use_cache = False\n',
-        gradient_checkpointing ? 'model.gradient_checkpointing_enable()\n' : '',
-        '\nparams = sum(p.numel() for p in model.parameters()) / 1e9\n',
-        'print(f"✅ Model loaded! Parameters: {params:.2f}B")\n',
-        'print(f"📊 Memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB used")\n',
+        config.use_unsloth ? '' : '\nparams = sum(p.numel() for p in model.parameters()) / 1e9\nprint(f"✅ Model loaded! Parameters: {params:.2f}B")\nprint(f"📊 Memory: {torch.cuda.memory_allocated() / 1e9:.2f} GB used")\n',
       ]
     },
     // Cell 8: LoRA/PEFT config
@@ -610,17 +669,33 @@ function generateColabNotebook(config: TrainingConfig): object {
       cell_type: 'code', execution_count: null, metadata: {}, outputs: [],
       source: [
         '# @title 🎛️ Configure LoRA/PEFT { display-mode: "form" }\n',
-        'from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training\n\n',
-        isQLoRA ? 'model = prepare_model_for_kbit_training(model)\n\n' : '',
-        'lora_config = LoraConfig(\n',
-        `    r=${lora_r},\n`,
-        `    lora_alpha=${lora_alpha},\n`,
-        `    target_modules=LORA_TARGET_MODULES,\n`,
-        `    lora_dropout=${lora_dropout},\n`,
-        '    bias="none",\n',
-        `    task_type=TaskType.CAUSAL_LM,\n`,
-        ')\n\n',
-        'model = get_peft_model(model, lora_config)\n',
+        config.use_unsloth 
+          ? 'from unsloth import is_fast_safe_tokenizer\n'
+          : 'from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training\n',
+        config.use_unsloth ? [
+          '# 🚀 Unsloth optimized LoRA configuration\n',
+          'from unsloth import FastLanguageModel\n',
+          'model = FastLanguageModel.get_peft_model(\n',
+          '    model,\n',
+          `    r=${lora_r},\n`,
+          `    lora_alpha=${lora_alpha},\n`,
+          '    target_modules=LORA_TARGET_MODULES.split(","),\n',
+          `    lora_dropout=${lora_dropout},\n`,
+          '    bias="none",\n',
+          '    use_gradient_checkpointing="unsloth",\n',
+          ')\n',
+        ].join('') : [
+          isQLoRA ? 'model = prepare_model_for_kbit_training(model)\n\n' : '',
+          'lora_config = LoraConfig(\n',
+          `    r=${lora_r},\n`,
+          `    lora_alpha=${lora_alpha},\n`,
+          `    target_modules=LORA_TARGET_MODULES.split(","),\n`,
+          `    lora_dropout=${lora_dropout},\n`,
+          '    bias="none",\n',
+          `    task_type=TaskType.CAUSAL_LM,\n`,
+          ')\n\n',
+          'model = get_peft_model(model, lora_config)\n',
+        ].join(''),
         'model.print_trainable_parameters()\n',
         '\n# Trainable vs frozen params\n',
         'trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)\n',
@@ -874,8 +949,8 @@ function CopyButton({ text }: { text: string }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: TrainingConfig = {
-  use_ollama: false, model: null, method: 'qlora', task_type: 'causal_lm', dataset_format: 'alpaca',
-  dataset_url: '', dataset_preview: [],
+  use_ollama: false, use_unsloth: false, model: null, method: 'qlora', task_type: 'causal_lm', dataset_format: 'alpaca',
+  dataset_url: '', dataset_file: null, dataset_preview: [],
   epochs: 3, batch_size: 4, learning_rate: 2e-4, max_seq_length: 2048,
   lora_r: 16, lora_alpha: 32, lora_dropout: 0.05,
   lora_target_modules: 'q_proj,v_proj,k_proj,o_proj',
@@ -901,11 +976,22 @@ export default function FineTuningPage() {
   const [mounted, setMounted] = useState(false)
   const [loraRecommendations, setLoraRecommendations] = useState<{r: number; alpha: number; dropout: number; rationale: string} | null>(null)
   const [adapters, setAdapters] = useState<any[]>([])
-  const [converterSourceFormat, setConverterSourceFormat] = useState('csv')
-  const [converterTargetFormat, setConverterTargetFormat] = useState('jsonl')
+  const [adapterFilter, setAdapterFilter] = useState<'all' | 'my_adapters' | 'public' | 'shared'>('all')
+  const mockAdapters: { id: string; name: string; model: string; downloads: number; version: string; public: boolean; shared: boolean; date: string; method: string }[] = [
+    { id: '1', name: 'Finance Q&A Adapter', model: 'Llama 3.1 8B', downloads: 89, version: 'v2.1', public: true, shared: false, date: '2024-02-15', method: 'qlora' },
+    { id: '2', name: 'Code Assistant', model: 'Qwen 2.5 7B', downloads: 56, version: 'v1.3', public: true, shared: true, date: '2024-02-10', method: 'lora' },
+    { id: '3', name: 'Medical Chat', model: 'Mistral 7B', downloads: 34, version: 'v1.0', public: false, shared: false, date: '2024-02-08', method: 'qlora' },
+    { id: '4', name: 'Customer Support', model: 'Phi-3.5 Mini', downloads: 23, version: 'v2.0', public: true, shared: true, date: '2024-02-05', method: 'lora' },
+    { id: '5', name: 'Legal Assistant', model: 'Gemma 2 9B', downloads: 18, version: 'v1.2', public: false, shared: false, date: '2024-02-01', method: 'full_ft' },
+  ]
+  const CONVERTER_FORMATS = ['csv', 'json', 'jsonl', 'parquet', 'arrow', 'huggingface'] as const
+  const [converterSourceFormat, setConverterSourceFormat] = useState<typeof CONVERTER_FORMATS[number]>('csv')
+  const [converterTargetFormat, setConverterTargetFormat] = useState<typeof CONVERTER_FORMATS[number]>('jsonl')
   const [converterFile, setConverterFile] = useState<File | null>(null)
   const [conversionProgress, setConversionProgress] = useState(0)
   const [modelComparison, setModelComparison] = useState<{base: any; fine_tuned: any} | null>(null)
+  const [datasetFile, setDatasetFile] = useState<File | null>(null)
+  const [datasetFileName, setDatasetFileName] = useState<string>('')
 
   // Load saved config and history from localStorage on mount
   useEffect(() => {
@@ -955,24 +1041,46 @@ export default function FineTuningPage() {
   }, [])
 
   const handleGenerateNotebook = async () => {
-    if (!config.model) return
+    if (!config.model) {
+      // Fallback to local generation if no model selected
+      const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
+      setNotebook(nb)
+      setTab('notebook')
+      return
+    }
     setGenerating(true)
     
     try {
       // Call backend AI service to generate notebook
+      console.log('Generating notebook with config:', {
+        model: config.model?.name,
+        method: config.method,
+        task_type: config.task_type,
+        dataset_format: config.dataset_format,
+        dataset_url: config.dataset_url,
+      })
+      
       const response = await fetch('/api/training/colab/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dataset_profile: {
-            name: 'training_data',
-            type: 'text',
+            name: config.dataset_url || 'training_data',
+            type: config.dataset_format || 'text',
             label_type: config.task_type,
+            rows: config.dataset_preview?.length || 0,
           },
           training_target: {
-            base_model: config.model?.hf_id || 'microsoft/phi-2',
+            base_model: config.model?.hf_id || '',
+            model_name: config.model?.name || '',
             method: config.method,
+            task_type: config.task_type,
+            dataset_format: config.dataset_format,
+            dataset_url: config.dataset_url,
             max_budget_usd: 10,
+            num_epochs: config.epochs,
+            batch_size: config.batch_size,
+            learning_rate: config.learning_rate,
           },
           constraints: {
             max_cost_usd: 10,
@@ -982,10 +1090,25 @@ export default function FineTuningPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to generate notebook')
+        const text = await response.text()
+        let errorData: { detail?: string } = {}
+        try {
+          errorData = text ? JSON.parse(text) : { detail: text || 'Unknown error' }
+        } catch {
+          errorData = { detail: text || 'Unknown error' }
+        }
+        console.error('Backend error:', errorData)
+        // Fall back to local generation
+        const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
+        setNotebook(nb)
+        setTab('notebook')
+        setGenerating(false)
+        return
       }
 
       const result = await response.json()
+      console.log('Notebook generated, result keys:', Object.keys(result))
+      
       const notebook = JSON.parse(result.notebook_json || '{}')
       setNotebook(notebook)
       setTab('notebook')
@@ -1006,9 +1129,10 @@ export default function FineTuningPage() {
       }
       setHistory(prev => [newHistoryItem, ...prev].slice(0, 50))
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to generate AI notebook:', error)
       // Fallback to local generation if backend fails
+      console.log('Falling back to local notebook generation...')
       const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
       setNotebook(nb)
       setTab('notebook')
@@ -1223,12 +1347,23 @@ export default function FineTuningPage() {
                 </div>
 
                 {/* Ollama Backend Toggle */}
-<div className="flex items-center gap-2 mt-4">
-  <input type="checkbox" checked={config.use_ollama}
-    onChange={e => updateConfig('use_ollama', e.target.checked)}
-    className="w-4 h-4 rounded accent-brand-500" />
-  <label className="text-sm text-neutral-300">Use Ollama backend (optional)</label>
-</div>
+                <div className="flex items-center gap-2 mt-4">
+                  <input type="checkbox" checked={config.use_ollama}
+                    onChange={e => updateConfig('use_ollama', e.target.checked)}
+                    className="w-4 h-4 rounded accent-brand-500" />
+                  <label className="text-sm text-neutral-300">Use Ollama backend (optional)</label>
+                </div>
+
+                {/* Unsloth Toggle */}
+                <div className="flex items-center gap-2 mt-3 p-3 rounded-lg bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20">
+                  <input type="checkbox" checked={config.use_unsloth}
+                    onChange={e => updateConfig('use_unsloth', e.target.checked)}
+                    className="w-4 h-4 rounded accent-purple-500" />
+                  <div className="flex-1">
+                    <label className="text-sm text-purple-300 font-medium">🚀 Use Unsloth (2x faster, 60% less VRAM)</label>
+                    <p className="text-xs text-neutral-500 mt-0.5">Faster training with automatic optimization</p>
+                  </div>
+                </div>
 
                 {config.method === 'qlora' && (
                   <div className="flex gap-3">
@@ -1267,6 +1402,27 @@ export default function FineTuningPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-neutral-500">HuggingFace dataset path, local JSON/CSV file, or URL</p>
+              </div>
+
+              {/* Dataset File Upload */}
+              <div className="space-y-2">
+                <label className="text-sm text-neutral-300">Or Upload Dataset File</label>
+                <div className="border-2 border-dashed border-neutral-700 rounded-xl p-4 text-center hover:border-brand-500/50 transition-colors">
+                  <input type="file" accept=".csv,.json,.jsonl" 
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      updateConfig('dataset_file', file)
+                      setDatasetFile(file)
+                      setDatasetFileName(file?.name || '')
+                    }}
+                    className="hidden" id="dataset-file-input" />
+                  <label htmlFor="dataset-file-input" className="cursor-pointer">
+                    <Upload className="w-6 h-6 text-neutral-500 mx-auto mb-2" />
+                    <p className="text-sm text-neutral-400">
+                      {datasetFileName || 'Click to upload CSV, JSON, or JSONL'}
+                    </p>
+                  </label>
+                </div>
               </div>
 
               {/* Dataset Preview */}
@@ -1654,7 +1810,19 @@ export default function FineTuningPage() {
         {/* ─── TAB: Deploy ────────────────────────────────────────────────────────── */}
         {tab === 'deploy' && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold text-white">Deploy Your Fine-Tuned Model</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white">Deploy Your Fine-Tuned Model</h2>
+                <p className="text-neutral-400 text-sm">
+                  {config.model ? `Deploy ${config.model.name} (${config.method})` : 'Select a model to see deployment options'}
+                </p>
+              </div>
+              {notebook && (
+                <Badge className="bg-brand-500/20 text-brand-400 border-brand-500/30">
+                  Notebook Generated
+                </Badge>
+              )}
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[
@@ -1662,27 +1830,47 @@ export default function FineTuningPage() {
                   title: 'HuggingFace Spaces', icon: '🤗', free: true, badge: 'FREE HOSTING',
                   desc: 'Deploy as a Gradio/Streamlit app. Free CPU tier, GPU from $0.05/hr.',
                   steps: ['Push model to HuggingFace Hub', 'Create a Space', 'Add Gradio inference code', 'Deploy publicly'],
-                  link: 'https://huggingface.co/spaces', cmd: 'huggingface-cli upload username/model ./output'
+                  link: 'https://huggingface.co/spaces', 
+                  cmd: config.method === 'full_ft' 
+                    ? `huggingface-cli upload ${config.model?.hf_id || 'username/model'} ./output`
+                    : `huggingface-cli upload ${config.model?.hf_id || 'username/model'}-adapter ./adapter`,
+                  req: config.method === 'full_ft' ? '~4GB+ storage' : '~100MB adapter',
                 },
                 {
                   title: 'Ollama (Local)', icon: '🦙', free: true, badge: 'LOCAL',
                   desc: 'Run your model locally with a REST API. Perfect for development.',
-                  steps: ['Convert to GGUF format', 'Create Modelfile', 'ollama create my-model -f Modelfile', 'ollama run my-model'],
-                  link: 'https://ollama.com', cmd: 'python llama.cpp/convert-hf-to-gguf.py ./output'
+                  steps: config.method === 'full_ft' 
+                    ? ['Convert to GGUF format', 'Create Modelfile', 'ollama create my-model -f Modelfile', 'ollama run my-model']
+                    : ['Use peft+transformers', 'Load adapter with PeftModel', 'Run inference locally', 'Serve via FastAPI'],
+                  link: 'https://ollama.com', 
+                  cmd: config.method === 'full_ft' 
+                    ? 'python llama.cpp/convert-hf-to-gguf.py ./output'
+                    : 'python inference.py',
+                  req: config.method === 'full_ft' ? '~8GB VRAM' : '~4GB VRAM',
                 },
                 {
                   title: 'vLLM (Production)', icon: '⚡', free: false, badge: 'PRODUCTION',
                   desc: 'High-throughput inference server. Used by major AI companies.',
-                  steps: ['pip install vllm', 'Load your LoRA adapter', 'Start server with CLI', 'OpenAI-compatible API'],
-                  link: 'https://vllm.ai', cmd: 'python -m vllm.entrypoints.openai.api_server --model output/'
+                  steps: config.method === 'full_ft'
+                    ? ['pip install vllm', 'Load your model', 'Start server with CLI', 'OpenAI-compatible API']
+                    : ['pip install vllm', 'Load base model + adapter', 'Start server with lora', 'OpenAI-compatible API'],
+                  link: 'https://vllm.ai', 
+                  cmd: config.method === 'full_ft'
+                    ? 'python -m vllm.entrypoints.openai.api_server --model ./output'
+                    : 'python -m vllm.entrypoints.openai.api_server --model meta-llama/Llama-2-7b --loraadapter ./adapter',
+                  req: config.method === 'full_ft' ? 'A100 40GB recommended' : 'A100 16GB sufficient',
                 },
                 {
-                  title: 'Together AI / Replicate', icon: '🌐', free: false, badge: 'CLOUD API',
+                  title: 'Replicate', icon: '🌐', free: false, badge: 'CLOUD API',
                   desc: 'Upload model once, get a scalable API endpoint. Pay per token.',
                   steps: ['Create account', 'Upload model files', 'Get API endpoint', 'Call via REST API'],
-                  link: 'https://replicate.com', cmd: 'replicate push username/model:v1'
+                  link: 'https://replicate.com', 
+                  cmd: config.method === 'full_ft' 
+                    ? 'replicate push username/model:v1'
+                    : 'replicate push username/model-adapter:v1',
+                  req: config.method === 'full_ft' ? '$5-10 per hour' : '$0.50/hr',
                 },
-              ].map(({ title, icon, free, badge, desc, steps, link, cmd }) => (
+              ].map(({ title, icon, free, badge, desc, steps, link, cmd, req }) => (
                 <div key={title} className="p-6 rounded-2xl bg-neutral-900/50 border border-white/5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1712,6 +1900,11 @@ export default function FineTuningPage() {
                     <code className="text-xs text-emerald-400 font-mono flex-1 truncate">{cmd}</code>
                     <CopyButton text={cmd} />
                   </div>
+                  <div className="flex items-center gap-2 text-xs text-neutral-500">
+                    <span className="flex items-center gap-1">
+                      <Cpu className="w-3 h-3" /> {req}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1721,16 +1914,65 @@ export default function FineTuningPage() {
               <h3 className="font-bold text-white flex items-center gap-2">
                 <Code2 className="w-5 h-5 text-brand-400" />Quick Inference Code
               </h3>
-              <div className="rounded-xl bg-neutral-950 border border-neutral-800 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800">
-                  <span className="text-xs text-neutral-500 font-mono">inference.py</span>
-                  <CopyButton text={`from transformers import AutoModelForCausalLM, AutoTokenizer
+              {config.method === 'full_ft' ? (
+                <div className="rounded-xl bg-neutral-950 border border-neutral-800 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800">
+                    <span className="text-xs text-neutral-500 font-mono">inference.py</span>
+                    <CopyButton text={`from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+# Load fine-tuned model (full fine-tuning)
+model_id = "${config.model?.hf_id || 'meta-llama/Meta-Llama-3.1-8B-Instruct'}"
+output_dir = "./output/${config.model?.hf_id?.split('/').pop() || 'finetuned_model'}"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    output_dir, 
+    torch_dtype=torch.bfloat16, 
+    device_map="auto"
+)
+
+# Inference
+prompt = "### Instruction:\\nTell me about fine-tuning.\\n\\n### Response:\\n"
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+with torch.no_grad():
+    outputs = model.generate(**inputs, max_new_tokens=256, temperature=0.7, do_sample=True)
+response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+print(response)`} />
+                  </div>
+                  <pre className="p-4 text-xs text-neutral-300 font-mono overflow-x-auto leading-relaxed">{`from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+# Load fine-tuned model (full fine-tuning)
+model_id = "${config.model?.hf_id || 'meta-llama/Meta-Llama-3.1-8B-Instruct'}"
+output_dir = "./output/${config.model?.hf_id?.split('/').pop() || 'finetuned_model'}"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    output_dir, 
+    torch_dtype=torch.bfloat16, 
+    device_map="auto"
+)
+
+# Inference
+prompt = "### Instruction:\\nTell me about fine-tuning.\\n\\n### Response:\\n"
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+with torch.no_grad():
+    outputs = model.generate(**inputs, max_new_tokens=256, temperature=0.7, do_sample=True)
+response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+print(response)`}</pre>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-neutral-950 border border-neutral-800 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2 border-b border-neutral-800">
+                    <span className="text-xs text-neutral-500 font-mono">inference.py</span>
+                    <CopyButton text={`from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 import torch
 
-# Load base model + LoRA adapter
+# Load base model + ${config.method.toUpperCase()} adapter
 model_id = "${config.model?.hf_id || 'meta-llama/Meta-Llama-3.1-8B-Instruct'}"
-adapter_path = "./finetuned_model"
+adapter_path = "./adapter"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 base_model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
@@ -1743,14 +1985,14 @@ with torch.no_grad():
     outputs = model.generate(**inputs, max_new_tokens=256, temperature=0.7, do_sample=True)
 response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
 print(response)`} />
-                </div>
-                <pre className="p-4 text-xs text-neutral-300 font-mono overflow-x-auto leading-relaxed">{`from transformers import AutoModelForCausalLM, AutoTokenizer
+                  </div>
+                  <pre className="p-4 text-xs text-neutral-300 font-mono overflow-x-auto leading-relaxed">{`from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 import torch
 
-# Load base model + LoRA adapter
+# Load base model + ${config.method.toUpperCase()} adapter
 model_id = "${config.model?.hf_id || 'meta-llama/Meta-Llama-3.1-8B-Instruct'}"
-adapter_path = "./finetuned_model"
+adapter_path = "./adapter"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 base_model = AutoModelForCausalLM.from_pretrained(
@@ -1765,7 +2007,8 @@ with torch.no_grad():
     outputs = model.generate(**inputs, max_new_tokens=256, temperature=0.7, do_sample=True)
 response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 print(response)`}</pre>
-              </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2000,7 +2243,7 @@ print(response)`}</pre>
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-bold text-white">Dataset Format Converter</h2>
-              <p className="text-neutral-400 text-sm">Convert datasets between CSV, JSONL, Parquet, and HuggingFace formats</p>
+              <p className="text-neutral-400 text-sm">Convert datasets between CSV, JSON, JSONL, Parquet, Arrow, and HuggingFace formats</p>
             </div>
 
             <Card className="bg-neutral-900/50 border-white/5">
@@ -2009,10 +2252,10 @@ print(response)`}</pre>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <label className="text-sm font-medium text-white">Source Format</label>
-                    <div className="flex gap-2">
-                      {(['csv', 'jsonl', 'parquet'] as const).map(fmt => (
+                    <div className="flex flex-wrap gap-2">
+                      {CONVERTER_FORMATS.map(fmt => (
                         <button key={fmt} onClick={() => setConverterSourceFormat(fmt)}
-                          className={cn('flex-1 py-3 rounded-xl border text-sm font-medium transition-all',
+                          className={cn('px-4 py-3 rounded-xl border text-sm font-medium transition-all',
                             converterSourceFormat === fmt
                               ? 'border-brand-500 bg-brand-500/10 text-brand-400'
                               : 'border-neutral-700 text-neutral-400 hover:border-neutral-600'
@@ -2024,10 +2267,10 @@ print(response)`}</pre>
                   </div>
                   <div className="space-y-3">
                     <label className="text-sm font-medium text-white">Target Format</label>
-                    <div className="flex gap-2">
-                      {(['csv', 'jsonl', 'parquet'] as const).map(fmt => (
+                    <div className="flex flex-wrap gap-2">
+                      {CONVERTER_FORMATS.map(fmt => (
                         <button key={fmt} onClick={() => setConverterTargetFormat(fmt)}
-                          className={cn('flex-1 py-3 rounded-xl border text-sm font-medium transition-all',
+                          className={cn('px-4 py-3 rounded-xl border text-sm font-medium transition-all',
                             converterTargetFormat === fmt
                               ? 'border-brand-500 bg-brand-500/10 text-brand-400'
                               : 'border-neutral-700 text-neutral-400 hover:border-neutral-600'
@@ -2044,7 +2287,7 @@ print(response)`}</pre>
                   <Upload className="w-10 h-10 text-neutral-500 mx-auto mb-3" />
                   <p className="text-white font-medium mb-1">Drop your dataset file here</p>
                   <p className="text-neutral-500 text-sm mb-4">Supports CSV, JSONL, Parquet</p>
-                  <input type="file" accept=".csv,.json,.jsonl,.parquet" 
+                  <input type="file" accept=".csv,.json,.jsonl,.parquet,.arrow,.ds" 
                     onChange={(e) => setConverterFile(e.target.files?.[0] || null)}
                     className="hidden" id="converter-file" />
                   <label htmlFor="converter-file">
@@ -2305,7 +2548,12 @@ print(response)`}</pre>
             {/* Filter */}
             <div className="flex gap-2">
               {(['all', 'my_adapters', 'public', 'shared'] as const).map(filter => (
-                <button key={filter} className="px-4 py-2 rounded-lg text-sm font-medium transition-all bg-neutral-800 border border-neutral-700 text-neutral-400 hover:text-white">
+                <button key={filter} onClick={() => setAdapterFilter(filter)}
+                  className={cn('px-4 py-2 rounded-lg text-sm font-medium transition-all border',
+                    adapterFilter === filter 
+                      ? 'bg-brand-500 border-brand-500 text-white' 
+                      : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white'
+                  )}>
                   {filter.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}
                 </button>
               ))}
@@ -2313,13 +2561,11 @@ print(response)`}</pre>
 
             {/* Adapter List */}
             <div className="space-y-3">
-              {[
-                { name: 'Finance Q&A Adapter', model: 'Llama 3.1 8B', downloads: 89, version: 'v2.1', public: true, date: '2024-02-15' },
-                { name: 'Code Assistant', model: 'Qwen 2.5 7B', downloads: 56, version: 'v1.3', public: true, date: '2024-02-10' },
-                { name: 'Medical Chat', model: 'Mistral 7B', downloads: 34, version: 'v1.0', public: false, date: '2024-02-08' },
-                { name: 'Customer Support', model: 'Phi-3.5 Mini', downloads: 23, version: 'v2.0', public: true, date: '2024-02-05' },
-                { name: 'Legal Assistant', model: 'Gemma 2 9B', downloads: 18, version: 'v1.2', public: false, date: '2024-02-01' },
-              ].map((adapter, i) => (
+              {(adapterFilter === 'all' ? adapters.length > 0 ? adapters : mockAdapters : 
+                adapterFilter === 'my_adapters' ? mockAdapters.filter(a => !a.public) :
+                adapterFilter === 'public' ? mockAdapters.filter(a => a.public) :
+                mockAdapters.filter(a => a.shared)
+              ).map((adapter, i) => (
                 <Card key={i} className="bg-neutral-900/50 border-white/5 hover:border-brand-500/30 transition-all">
                   <CardContent className="pt-4">
                     <div className="flex items-center justify-between">

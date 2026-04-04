@@ -19,6 +19,7 @@ import json
 import logging
 import traceback
 import os
+import sqlite3
 
 # Load .env.local for GROQ_API_KEY and other secrets
 _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.local")
@@ -67,6 +68,18 @@ try:
 except ImportError:
     HAS_RATE_LIMITING = False
     limiter = None
+
+
+def rate_limit(limit_str: str = "10/minute"):
+    """Decorator factory for rate limiting that works when slowapi is not available."""
+
+    def decorator(func):
+        if HAS_RATE_LIMITING and limiter:
+            return limiter.limit(limit_str)(func)
+        return func
+
+    return decorator
+
 
 try:
     from agent.finetuning_service import router as finetuning_router
@@ -290,7 +303,7 @@ class AuthResponse(BaseModel):
 
 
 @app.post("/api/auth/register", response_model=AuthResponse)
-@limiter.limit("5/minute") if HAS_RATE_LIMITING else lambda x: x
+@rate_limit("5/minute")
 def register(request: Request, register_data: RegisterRequest):
     if not register_data.email or not register_data.password or not register_data.name:
         raise HTTPException(status_code=400, detail="All fields are required")
@@ -702,7 +715,7 @@ class TrainingPlanRequest(BaseModel):
 
 
 @app.post("/api/training/plan")
-@limiter.limit("20/minute") if HAS_RATE_LIMITING else lambda x: x
+@rate_limit("20/minute")
 def plan_training(request: Request, training_data: TrainingPlanRequest):
     try:
         project_id = training_data.project_id
@@ -841,7 +854,7 @@ class TrainingStartRequest(BaseModel):
 
 
 @app.post("/api/training/start")
-@limiter.limit("10/minute") if HAS_RATE_LIMITING else lambda x: x
+@rate_limit("10/minute")
 def start_training(request: TrainingStartRequest):
     project = ProjectStore.get(request.project_id)
     if not project:
@@ -980,7 +993,7 @@ def complete_training(project_id: str, metrics: Optional[Dict[str, Any]] = None)
 
 
 @app.post("/api/auth/login", response_model=AuthResponse)
-@limiter.limit("10/minute") if HAS_RATE_LIMITING else lambda x: x
+@rate_limit("10/minute")
 def login(request: Request, login_data: LoginRequest):
     if not login_data.email or not login_data.password:
         raise HTTPException(status_code=400, detail="Email and password are required")
@@ -1082,7 +1095,7 @@ def health_check():
 
 
 @app.post("/api/design/request")
-@limiter.limit("10/minute") if HAS_RATE_LIMITING else lambda x: x
+@rate_limit("10/minute")
 def design_pipeline(request: Request, request_data: DesignRequest):
     try:
         constraints = ConstraintSpec(
@@ -1643,7 +1656,9 @@ def generate_pipeline_candidates(request: dict):
         logger.error(f"AI pipeline generation failed: {str(e)}")
 
     profiles = {
-        "classical": {"cost": 0.5, "carbon": 0.01, "latency": 100, "accuracy": 0.82},
+        "random_forest": {"cost": 0.5, "carbon": 0.01, "latency": 100, "accuracy": 0.82},
+        "xgboost": {"cost": 0.7, "carbon": 0.02, "latency": 150, "accuracy": 0.85},
+        "logistic_regression": {"cost": 0.2, "carbon": 0.005, "latency": 50, "accuracy": 0.78},
         "small_deep": {"cost": 2.0, "carbon": 0.1, "latency": 500, "accuracy": 0.88},
         "compressed": {"cost": 0.8, "carbon": 0.03, "latency": 200, "accuracy": 0.85},
         "transformer": {"cost": 8.0, "carbon": 0.5, "latency": 2000, "accuracy": 0.95},
@@ -2045,6 +2060,102 @@ class TrainingStatus(BaseModel):
 training_runs: dict = {}
 
 
+@app.post("/api/dataset/convert")
+async def convert_dataset(request: Request):
+    """Convert dataset between formats (CSV, JSON, JSONL, Parquet, Arrow, HuggingFace)"""
+    try:
+        import pandas as pd
+        import io
+        import json
+
+        # Get form data
+        form = await request.form()
+        file = form.get("file")
+        source_format = form.get("source_format", "csv")
+        target_format = form.get("target_format", "jsonl")
+
+        if not file:
+            raise HTTPException(status_code=400, detail="No file provided")
+
+        # Read file content
+        content = await file.read()
+
+        # Load data based on source format
+        df = None
+        if source_format == "csv":
+            df = pd.read_csv(io.BytesIO(content))
+        elif source_format == "json":
+            data = json.loads(content)
+            df = pd.DataFrame(data) if isinstance(data, list) else pd.DataFrame([data])
+        elif source_format == "jsonl":
+            lines = content.decode("utf-8").strip().split("\n")
+            data = [json.loads(line) for line in lines if line.strip()]
+            df = pd.DataFrame(data)
+        elif source_format == "parquet":
+            df = pd.read_parquet(io.BytesIO(content))
+        elif source_format == "arrow":
+            df = pd.read_feather(io.BytesIO(content))
+        elif source_format == "huggingface":
+            data = json.loads(content)
+            df = pd.DataFrame(data) if isinstance(data, list) else pd.DataFrame([data])
+        else:
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported source format: {source_format}"
+            )
+
+        # Convert to target format
+        output = io.BytesIO()
+        mime_type = "application/octet-stream"
+
+        if target_format == "csv":
+            df.to_csv(output, index=False)
+            mime_type = "text/csv"
+        elif target_format == "json":
+            output.write(json.dumps(df.to_dict(orient="records"), indent=2).encode())
+            mime_type = "application/json"
+        elif target_format == "jsonl":
+            records = df.to_dict(orient="records")
+            lines = [json.dumps(r) for r in records]
+            output.write("\n".join(lines).encode())
+            mime_type = "application/jsonl"
+        elif target_format == "parquet":
+            df.to_parquet(output, index=False)
+            mime_type = "application/parquet"
+        elif target_format == "arrow":
+            df.to_feather(output, index=False)
+            mime_type = "application/arrow"
+        elif target_format == "huggingface":
+            output.write(json.dumps(df.to_dict(orient="records"), indent=2).encode())
+            mime_type = "application/json"
+        else:
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported target format: {target_format}"
+            )
+
+        output.seek(0)
+
+        from fastapi.responses import StreamingResponse
+
+        return StreamingResponse(
+            output,
+            media_type=mime_type,
+            headers={"Content-Disposition": f"attachment; filename=converted.{target_format}"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Dataset convert error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Also register at /api/finetuning/dataset/convert
+@app.post("/api/finetuning/dataset/convert")
+async def convert_dataset_finetune(request: Request):
+    """Alias for /api/dataset/convert for finetuning compatibility"""
+    return await convert_dataset(request)
+
+
 @app.post("/api/training/run/start")
 def start_training_run(request: TrainingRequest):
     """Start a training run"""
@@ -2395,13 +2506,17 @@ def create_colab_training(request: ColabTrainingRequest):
             "model_type": model_type,
             "method": method,
             "task_type": training_target.get("task_type", "classification"),
-            "num_epochs": 3,
-            "batch_size": 4,
-            "learning_rate": 2e-4,
+            "num_epochs": training_target.get("num_epochs", 3),
+            "batch_size": training_target.get("batch_size", 4),
+            "learning_rate": training_target.get("learning_rate", 2e-4),
             "max_budget": max_budget,
             "lora_r": training_target.get("lora_r", 16),
             "lora_alpha": training_target.get("lora_alpha", 32),
             "lora_dropout": training_target.get("lora_dropout", 0.05),
+            "dataset": request.dataset_profile,
+            "constraints": request.constraints or {},
+            "dataset_url": training_target.get("dataset_url", ""),
+            "dataset_format": training_target.get("dataset_format", "alpaca"),
         }
 
         notebook_json = ai.generate_notebook(config)
@@ -2748,3 +2863,90 @@ def update_user_role(user_id: int, role: str):
 
     success = UserStore.update_role(user_id, role)
     return {"user_id": user_id, "role": role}
+
+
+# ─── Approval Workflow Endpoints ─────────────────────────────────────────────────────
+
+from ui.approval_workflow import ApprovalWorkflow, ApprovalStatus, ApprovalAction
+
+
+@app.post("/api/approval/workflows")
+def create_approval_workflow(request: Request, data: dict):
+    """Create a new approval workflow for a pipeline"""
+    try:
+        workflow_id = ApprovalWorkflow.create_workflow(
+            entity_type=data.get("entity_type", "pipeline"),
+            entity_id=data["entity_id"],
+            version=data.get("version", 1),
+            metadata=data.get("metadata"),
+        )
+        return {"workflow_id": workflow_id}
+    except Exception as e:
+        logger.error(f"Failed to create workflow: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/approval/workflows/{workflow_id}/actions")
+def perform_approval_action(
+    workflow_id: str,
+    request: Request,
+    action: str,
+    actor_id: Optional[int] = None,
+    comment: Optional[str] = None,
+):
+    """Perform an action on an approval workflow (submit, approve, reject, request_changes)"""
+    try:
+        action_enum = ApprovalAction(action)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
+
+    result = ApprovalWorkflow.perform_action(
+        workflow_id=workflow_id,
+        action=action_enum,
+        actor_id=actor_id,
+        comment=comment,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+
+    return result
+
+
+@app.get("/api/approval/workflows/{workflow_id}")
+def get_workflow(workflow_id: str):
+    """Get workflow details"""
+    workflow = ApprovalWorkflow.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow
+
+
+@app.get("/api/approval/workflows/entity/{entity_type}/{entity_id}")
+def get_workflows_for_entity(entity_type: str, entity_id: str):
+    """Get all workflows for an entity"""
+    return ApprovalWorkflow.get_workflows_for_entity(entity_type, entity_id)
+
+
+@app.get("/api/approval/workflows/pending")
+def get_pending_reviews():
+    """Get all pending review workflows"""
+    return ApprovalWorkflow.get_pending_reviews()
+
+
+@app.get("/api/approval/workflows/{workflow_id}/audit")
+def get_audit_trail(workflow_id: str):
+    """Get audit trail for a workflow"""
+    return ApprovalWorkflow.get_audit_trail(workflow_id)
+
+
+@app.get("/api/approval/check/{entity_type}/{entity_id}/{version}")
+def check_approval_status(entity_type: str, entity_id: str, version: int):
+    """Check if an entity is approved"""
+    is_approved = ApprovalWorkflow.is_approved(entity_type, entity_id, version)
+    return {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "version": version,
+        "is_approved": is_approved,
+    }

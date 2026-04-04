@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { useDesign, TrainingRun } from '@/hooks/use-design'
@@ -14,11 +14,7 @@ import {
   Download, Upload, Trash2, ExternalLink, XCircle, Activity
 } from 'lucide-react'
 
-interface TrainResultPageProps {
-  params: Promise<{ run_id: string }>
-}
-
-export default function TrainResultPage({ params }: TrainResultPageProps) {
+function TrainResultContent({ params }: { params: Promise<{ run_id: string }> }) {
   const router = useRouter()
   const { run_id } = use(params)
   const { dataset, constraints, selectedPipeline, trainingRun, setTrainingRun, resetDesign } = useDesign()
@@ -437,5 +433,13 @@ print(result)`
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function TrainResultPage({ params }: { params: Promise<{ run_id: string }> }) {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen text-neutral-500">Loading...</div>}>
+      <TrainResultContent params={params} />
+    </Suspense>
   )
 }

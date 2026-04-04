@@ -450,29 +450,57 @@ class ColabTrainingService:
 
     def __init__(self):
         self.jobs: Dict[str, Dict[str, Any]] = {}
+        self._ai_generator = None
 
-    def create_notebook(self, config: Dict[str, Any]) -> str:
-        """Generate Colab notebook JSON"""
-        import json
+    def _get_ai_generator(self):
+        """Lazy-load AI generator."""
+        if self._ai_generator is None:
+            from agent.notebook.ai_generator import get_ai_generator
 
-        model_id = config.get("model_id", "")
-        if not model_id:
-            model_id = "meta-llama/Llama-3.1-8B-Instruct"
+            self._ai_generator = get_ai_generator()
+        return self._ai_generator
 
-        # Extract model name from ID, or use explicit name
-        model_name = config.get("model_name", "")
-        if not model_name:
-            # Extract clean name from model ID
-            model_name = model_id.split("/")[-1]
-            # Clean up common HF model names
-            model_name = model_name.replace("-Instruct", "").replace("-instruct", "")
-            model_name = model_name.replace("-v0.3", "").replace("-v0.2", "")
+    def create_notebook(
+        self, config: Dict[str, Any], use_ai: bool = True, prefer_local: bool = True
+    ) -> str:
+        """Generate Colab notebook JSON using AI or template"""
+        from agent.notebook.generator import NotebookGenerator
 
-        method = config.get("method", "lora")
-        task_type = config.get("task_type", "classification")
-        lora_r = config.get("lora_r", 16)
-        lora_alpha = config.get("lora_alpha", 32)
-        lora_dropout = config.get("lora_dropout", 0.05)
+        ai_notebook_json = ""
+        generation_method = "template"
+
+        # Try AI generation if enabled
+        if use_ai:
+            try:
+                ai_gen = self._get_ai_generator()
+                ai_notebook_json, generation_method = ai_gen.generate_notebook(
+                    config=config,
+                    prefer_local=prefer_local,
+                )
+                logger.info(
+                    f"AI generation result: method={generation_method}, has_content={bool(ai_notebook_json)}"
+                )
+            except Exception as e:
+                logger.error(f"AI generation error: {e}")
+                generation_method = "error"
+
+        # Generate using NotebookGenerator (handles both AI response and template fallback)
+        try:
+            generator = NotebookGenerator()
+            notebook_json = generator.create_notebook(
+                config=config,
+                ai_generated=bool(ai_notebook_json),
+                ai_response=ai_notebook_json if generation_method != "error" else None,
+            )
+
+            # Add metadata about generation method
+            if generation_method != "template":
+                config["_generation_method"] = generation_method
+
+            return notebook_json
+        except Exception as e:
+            logger.error(f"Notebook generation failed: {e}")
+            raise
 
         # Generate task-specific instructions
         task_instructions = {
@@ -909,3 +937,8 @@ def get_training_job(job_id: str) -> Dict[str, Any]:
     if not job:
         return {"error": "Job not found"}
     return job
+
+
+def get_colab_service() -> ColabTrainingService:
+    """Get the singleton ColabTrainingService instance"""
+    return colab_service

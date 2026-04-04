@@ -8,6 +8,7 @@ from .logger import logger
 from system2ml.backends.hf_transformers import HFTransformersBackend
 from system2ml.backends.ollama import OllamaBackend
 
+
 def create_backend(name: str, **kwargs):
     """Factory that returns a model backend instance.
 
@@ -28,7 +29,6 @@ def create_backend(name: str, **kwargs):
     raise ValueError(f"Unknown backend '{name}'. Available: hf, ollama")
 
 
-
 class PipelineError(RuntimeError):
     """Base class for pipeline‑related errors.
 
@@ -36,7 +36,9 @@ class PipelineError(RuntimeError):
     exception hierarchy makes error handling clearer and allows callers to
     distinguish pipeline issues from generic runtime errors.
     """
+
     pass
+
 
 class PipelineStatus(Enum):
     PENDING = "pending"
@@ -75,11 +77,11 @@ class Pipeline:
     carbon_kg: Optional[float] = None
     latency_ms: Optional[float] = None
     config: dict = field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     def __post_init__(self):
         logger.info(f"Pipeline created: {self.id} ({self.name}) with status {self.status.value}")
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
 
 
 @dataclass
@@ -132,7 +134,7 @@ class FailureRecord:
 
 __all__ = [
     "PipelineStatus",
-    "DataType", 
+    "DataType",
     "PipelineStep",
     "Pipeline",
     "PipelineDesign",

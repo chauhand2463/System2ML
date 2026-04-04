@@ -90,10 +90,14 @@ export default function DesignResultsPage() {
         
         const modelFamily = candidate.model_families?.[0] || candidate.modelFamily || 'classical'
         
+        // Debug log the model family being used
+        console.log('Selected pipeline model family:', modelFamily)
+        console.log('Candidate data:', candidate)
+        
         // Map model family to actual model ID and display name
         // LLMs get HuggingFace IDs, Classical ML models get null (use local training)
         const modelMap: Record<string, { id: string | null, name: string, type: 'llm' | 'ml' }> = {
-          // LLMs (transformer-based)
+          // LLMs (transformer-based) - explicit mapping
           'transformer': { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'LLaMA 3.1 8B', type: 'llm' },
           'llama': { id: 'meta-llama/Llama-3.1-8B-Instruct', name: 'LLaMA 3.1 8B', type: 'llm' },
           'phi': { id: 'microsoft/phi-2', name: 'Phi-2', type: 'llm' },
@@ -108,14 +112,19 @@ export default function DesignResultsPage() {
           'logistic_regression': { id: null, name: 'Logistic Regression', type: 'ml' },
         }
         
-        const modelInfo = modelMap[modelFamily] || { id: null, name: 'Random Forest', type: 'ml' }
+        const modelInfo = modelMap[modelFamily]
+        
+        // If modelInfo is undefined, use a default LLM (llama)
+        const finalModelInfo = modelInfo || { id: 'meta-llama/Meta-Llama-3.1-8B-Instruct', name: 'LLaMA 3.1 8B', type: 'llm' }
+        
+        console.log('Mapped model info:', finalModelInfo)
         
         // Determine task type from dataset
         const taskType = (dataset as any)?.labelType || 'classification'
         
         // Determine training method based on model type and budget
         const getTrainingMethod = () => {
-          if (modelInfo.type === 'ml') return 'classical'
+          if (finalModelInfo.type === 'ml') return 'classical'
           // For LLMs: QLoRA for low budget (<$10), LoRA for normal budget
           return candidate.estimatedCost < 10 ? 'qlora' : 'lora'
         }
@@ -123,14 +132,16 @@ export default function DesignResultsPage() {
         // Save training target for Colab notebook generation
         const trainingTarget = {
           // Only set base_model for LLMs, null for classical ML
-          base_model: modelInfo.type === 'llm' ? modelInfo.id : null,
-          model_name: modelInfo.name,
-          model_type: modelInfo.type,
+          base_model: finalModelInfo.type === 'llm' ? finalModelInfo.id : 'microsoft/phi-2',
+          model_name: finalModelInfo.name,
+          model_type: finalModelInfo.type,
           method: getTrainingMethod(),
           task_type: taskType,
           dataset_format: 'csv',
           max_budget_usd: candidate.estimatedCost,
         }
+        
+        console.log('Saving training target:', trainingTarget)
         localStorage.setItem('system2ml_training_target', JSON.stringify(trainingTarget))
       }
     } catch (error) {

@@ -33,53 +33,72 @@ export async function POST(request: NextRequest) {
         const body = await request.json()
         const { dataset_profile, training_target, constraints } = body
         
-        const response = await fetch(`${API_BASE}/api/training/colab/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                dataset_profile,
-                training_target,
-                constraints
+        // Validate required fields
+        if (!training_target?.base_model) {
+            return NextResponse.json(
+                { error: 'base_model is required' },
+                { status: 400 }
+            )
+        }
+        
+        // Try to call backend AI service
+        try {
+            const response = await fetch(`${API_BASE}/api/training/colab/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dataset_profile,
+                    training_target,
+                    constraints
+                })
             })
-        })
 
-        if (!response.ok) {
-            const error = await response.json()
-            return NextResponse.json(error, { status: response.status })
-        }
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ detail: 'Backend error' }))
+                console.error('Backend error:', error)
+                return NextResponse.json(error, { status: response.status })
+            }
 
-        const result = await response.json()
-        
-        const jobId = result.job_id || Math.random().toString(36).substring(2, 15)
-        
-        const job = {
-            job_id: jobId,
-            status: result.status || 'created',
-            config: result.config || {
-                model_name: training_target?.base_model || 'microsoft/phi-2',
-                method: training_target?.method || 'lora',
-            },
-            notebook_content: result.notebook_json || '{}',
-            created_at: new Date().toISOString()
+            const result = await response.json()
+            
+            const jobId = result.job_id || Math.random().toString(36).substring(2, 15)
+            
+            const job = {
+                job_id: jobId,
+                status: result.status || 'created',
+                config: result.config || {
+                    model_name: training_target?.base_model || '',
+                    method: training_target?.method || 'lora',
+                },
+                notebook_content: result.notebook_json || '{}',
+                created_at: new Date().toISOString()
+            }
+            
+            jobs.set(jobId, job)
+            
+            return NextResponse.json({
+                job_id: jobId,
+                status: job.status,
+                config: job.config,
+                notebook_json: job.notebook_content,
+                download_url: `/api/training/colab/download?job_id=${jobId}`,
+                colab_url: result.colab_link || 'https://colab.research.google.com/#new',
+                instructions: result.instructions || [
+                    '📥 Download the notebook using the button below',
+                    '📂 Go to https://colab.research.google.com',
+                    '📤 Click "Upload notebook" and select the downloaded file',
+                    '▶️ Run the cells in order to train your model',
+                    '💾 Download your fine-tuned model when complete'
+                ]
+            })
+        } catch (backendError: any) {
+            console.error('Backend connection error:', backendError.message)
+            // If backend is not available, generate notebook directly using AI service
+            return NextResponse.json(
+                { error: 'Backend not available. Please start the backend server.' },
+                { status: 503 }
+            )
         }
-        
-        jobs.set(jobId, job)
-        
-        return NextResponse.json({
-            job_id: jobId,
-            status: job.status,
-            config: job.config,
-            notebook_json: job.notebook_content,
-            download_url: `/api/training/colab/download?job_id=${jobId}`,
-            colab_url: result.colab_link || 'https://colab.research.google.com/#new',
-            instructions: result.instructions || [
-                '📥 Download the notebook using the button below',
-                '📂 Go to https://colab.research.google.com',
-                '📤 Click "Upload notebook" and select the downloaded file',
-                '▶️ Run the cells in order to train your model',
-                '💾 Download your fine-tuned model when complete'
-            ]
-        })
         
     } catch (error: any) {
         console.error('Colab create error:', error)

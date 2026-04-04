@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PipelineNode, PipelineEdge } from '@/components/pipelines/pipeline-designer'
@@ -26,11 +26,7 @@ const PipelineDesigner = dynamic(
   }
 )
 
-interface PipelinePageProps {
-  params: Promise<{ id: string }>
-}
-
-export default function PipelineDetailPage({ params }: PipelinePageProps) {
+function PipelineDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
   const [pipeline, setPipeline] = useState<any>(null)
@@ -223,5 +219,13 @@ export default function PipelineDetailPage({ params }: PipelinePageProps) {
         </div>
       </div>
     </DashboardLayout>
+  )
+}
+
+export default function PipelineDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen text-neutral-500">Loading...</div>}>
+      <PipelineDetailContent params={params} />
+    </Suspense>
   )
 }

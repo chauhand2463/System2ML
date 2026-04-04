@@ -22,14 +22,21 @@ export default function TrainRunningPage() {
   const [stopping, setStopping] = useState(false)
   const [progress, setProgress] = useState(0)
   const [creatingColab, setCreatingColab] = useState(false)
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const [trainingPlan, setTrainingPlan] = useState<any>({})
+  const [trainingTarget, setTrainingTarget] = useState<any>({})
 
-  const projectId = typeof window !== 'undefined' ? localStorage.getItem('system2ml_project_id') : null
-  const trainingPlan = typeof window !== 'undefined'
-    ? JSON.parse(localStorage.getItem('system2ml_training_plan') || '{}')
-    : {}
-  const trainingTarget = typeof window !== 'undefined'
-    ? JSON.parse(localStorage.getItem('system2ml_training_target') || '{}')
-    : {}
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setProjectId(localStorage.getItem('system2ml_project_id'))
+      try {
+        setTrainingPlan(JSON.parse(localStorage.getItem('system2ml_training_plan') || '{}'))
+        setTrainingTarget(JSON.parse(localStorage.getItem('system2ml_training_target') || '{}'))
+      } catch (e) {
+        console.error('Failed to parse training plan:', e)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!selectedPipeline) {

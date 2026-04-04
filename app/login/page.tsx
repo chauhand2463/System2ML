@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Sparkles, Mail, Lock, ArrowRight, Eye, EyeOff, Loader2, Terminal } from 'lucide-react'
@@ -13,15 +13,9 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [formFocused, setFormFocused] = useState('')
   
   const { login } = useAuth()
   const router = useRouter()
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,43 +44,45 @@ export default function LoginPage() {
       {/* Left Panel - Decorative */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-brand-900 via-neutral-900 to-violet-900" />
+        
+        {/* Static gradient orbs - no blur on mount */}
         <div className="absolute inset-0">
-          <div className={`absolute top-1/4 left-1/4 w-96 h-96 bg-brand-500/20 rounded-full blur-[128px] transition-all duration-1000 ${mounted ? 'opacity-100' : 'opacity-0'}`} />
-          <div className={`absolute bottom-1/4 right-1/4 w-96 h-96 bg-violet-500/20 rounded-full blur-[128px] transition-all duration-1000 delay-300 ${mounted ? 'opacity-100' : 'opacity-0'}`} />
+          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-brand-500/10 rounded-full" />
+          <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-violet-500/10 rounded-full" />
         </div>
         
-        {/* Animated Grid */}
-        <div className="absolute inset-0 opacity-20">
+        {/* Static Grid */}
+        <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
         </div>
         
-        <div className={`relative z-10 flex flex-col justify-center items-center w-full p-12 transition-all duration-700 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-          <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-2xl shadow-brand-500/30 mb-8 transition-transform duration-500 hover:scale-110 hover:rotate-3 cursor-pointer`}>
+        <div className="relative z-10 flex flex-col justify-center items-center w-full p-12">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-2xl shadow-brand-500/30 mb-8">
             <Sparkles className="w-10 h-10 text-white" />
           </div>
-          <h2 className="text-4xl font-bold text-white mb-4 text-center animate-in slide-in-from-bottom duration-500">
+          <h2 className="text-4xl font-bold text-white mb-4 text-center">
             Welcome to System2ML
           </h2>
-          <p className="text-xl text-neutral-400 text-center max-w-md animate-in slide-in-from-bottom duration-500 delay-100">
+          <p className="text-xl text-neutral-400 text-center max-w-md">
             AI-powered ML pipeline design with constraint validation
           </p>
           
-          <div className="mt-12 grid grid-cols-2 gap-6 animate-in slide-in-from-bottom duration-500 delay-200">
+          <div className="mt-12 grid grid-cols-2 gap-6">
             {[
               { label: 'AI Design', value: '10x', icon: '⚡' },
               { label: 'Cost Save', value: '60%', icon: '💰' },
               { label: 'Uptime', value: '99.9%', icon: '🎯' },
               { label: 'Templates', value: '50+', icon: '📦' },
             ].map((stat, i) => (
-              <div key={i} className="text-center p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105 cursor-pointer group">
-                <div className="text-2xl font-bold text-brand-400 group-hover:text-brand-300 transition-colors">{stat.value}</div>
+              <div key={i} className="text-center p-4 rounded-xl bg-white/5 border border-white/10">
+                <div className="text-2xl font-bold text-brand-400">{stat.value}</div>
                 <div className="text-sm text-neutral-400">{stat.label}</div>
               </div>
             ))}
           </div>
 
           {/* Terminal Preview */}
-          <div className="mt-8 w-full max-w-md p-4 rounded-xl bg-black/50 border border-white/10 backdrop-blur-sm animate-in slide-in-from-bottom duration-500 delay-300">
+          <div className="mt-8 w-full max-w-md p-4 rounded-xl bg-black/50 border border-white/10">
             <div className="flex items-center gap-2 mb-2">
               <Terminal className="w-4 h-4 text-brand-400" />
               <span className="text-xs text-brand-400 font-mono">system2ml-cli</span>
@@ -101,7 +97,7 @@ export default function LoginPage() {
 
       {/* Right Panel - Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
-        <div className={`w-full max-w-md transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+        <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
               <Sparkles className="w-6 h-6 text-white" />
@@ -110,54 +106,50 @@ export default function LoginPage() {
           </div>
 
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2 animate-in slide-in-from-bottom duration-500">Sign in</h1>
-            <p className="text-neutral-400 animate-in slide-in-from-bottom duration-500 delay-100">Enter your credentials to access your account</p>
+            <h1 className="text-3xl font-bold text-white mb-2">Sign in</h1>
+            <p className="text-neutral-400">Enter your credentials to access your account</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-in shake duration-300">
+              <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                 {error}
               </div>
             )}
 
-            <div className={`space-y-2 transition-all duration-300 ${formFocused === 'email' ? 'scale-[1.02]' : ''}`}>
+            <div className="space-y-2">
               <label className="block text-sm font-medium text-neutral-300">
                 Email Address
               </label>
-              <div className="relative group">
-                <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${formFocused === 'email' ? 'text-brand-400' : 'text-neutral-500'}`} />
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  onFocus={() => setFormFocused('email')}
-                  onBlur={() => setFormFocused('')}
                   placeholder="you@example.com"
-                  className="w-full h-12 pl-12 pr-4 rounded-xl bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-300 hover:border-neutral-600"
+                  className="w-full h-12 pl-12 pr-4 rounded-xl bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
               </div>
             </div>
 
-            <div className={`space-y-2 transition-all duration-300 ${formFocused === 'password' ? 'scale-[1.02]' : ''}`}>
+            <div className="space-y-2">
               <label className="block text-sm font-medium text-neutral-300">
                 Password
               </label>
-              <div className="relative group">
-                <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${formFocused === 'password' ? 'text-brand-400' : 'text-neutral-500'}`} />
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onFocus={() => setFormFocused('password')}
-                  onBlur={() => setFormFocused('')}
                   placeholder="••••••••"
-                  className="w-full h-12 pl-12 pr-12 rounded-xl bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-300 hover:border-neutral-600"
+                  className="w-full h-12 pl-12 pr-12 rounded-xl bg-neutral-900 border border-neutral-700 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors duration-300 hover:scale-110"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
