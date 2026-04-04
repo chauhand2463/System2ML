@@ -1093,12 +1093,12 @@ export default function FineTuningPage() {
         const text = await response.text()
         let errorData: { detail?: string } = {}
         try {
-          errorData = text ? JSON.parse(text) : { detail: text || 'Unknown error' }
+          errorData = text ? JSON.parse(text) : { detail: text || 'Backend unavailable' }
         } catch {
-          errorData = { detail: text || 'Unknown error' }
+          errorData = { detail: text || 'Backend unavailable' }
         }
-        console.error('Backend error:', errorData)
-        // Fall back to local generation
+        console.warn('Backend error, using local fallback:', errorData.detail)
+        // Fall back to local generation - this is expected when backend is down
         const nb = platform === 'colab' ? generateColabNotebook(config) : generateJupyterNotebook(config)
         setNotebook(nb)
         setTab('notebook')
@@ -1788,14 +1788,14 @@ export default function FineTuningPage() {
                       <div className="flex-1 py-3 px-4 relative group">
                         {cell.cell_type === 'code' ? (
                           <div className="relative">
-                            <CopyButton text={cell.source.join('')} />
+                            <CopyButton text={(cell.source || []).join('')} />
                             <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-48 pr-8">
-                              {cell.source.join('').slice(0, 600)}{cell.source.join('').length > 600 ? '\n...' : ''}
+                              {((cell.source || []).join('').slice(0, 600))}{((cell.source || []).join('').length > 600 ? '\n...' : '')}
                             </pre>
                           </div>
                         ) : (
                           <div className="text-xs text-neutral-400 font-mono whitespace-pre-wrap leading-relaxed">
-                            {cell.source.join('').slice(0, 300)}
+                            {((cell.source || []).join('').slice(0, 300))}
                           </div>
                         )}
                       </div>
