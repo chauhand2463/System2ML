@@ -137,7 +137,7 @@ export default function DesignReviewPage() {
                     <DollarSign className="w-3 h-3" />
                     <span className="text-xs">Max Cost</span>
                   </div>
-                  <p className="text-lg font-semibold text-white">${constraints.maxCostUsd}</p>
+                  <p className="text-lg font-semibold text-white">₹{constraints.maxCostUsd}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-neutral-800/50">
                   <div className="flex items-center gap-2 text-neutral-400 mb-1">
@@ -264,7 +264,7 @@ export default function DesignReviewPage() {
                         </div>
                       </div>
                       <div className="flex gap-4 text-sm">
-                        <span className="text-neutral-400">${candidate.estimatedCost}</span>
+                        <span className="text-neutral-400">₹{candidate.estimatedCost}</span>
                         <span className="text-neutral-400">{candidate.estimatedCarbon}kg</span>
                         <span className="text-neutral-400">{candidate.estimatedLatencyMs}ms</span>
                         <span className="text-brand-400">{(candidate.estimatedAccuracy * 100).toFixed(0)}%</span>

@@ -272,7 +272,7 @@ export default function DesignResultsPage() {
                           </p>
                           <p className={cn('text-lg font-bold',
                             candidate.estimatedCost > constraints.maxCostUsd ? 'text-red-400' : 'text-white')}>
-                            ${candidate.estimatedCost}
+                            ₹{candidate.estimatedCost}
                           </p>
                         </div>
                         <div>

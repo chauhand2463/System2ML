@@ -50,7 +50,7 @@ export function CostAnalyticsChart({ data }: { data?: any[] }) {
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `$${value}`}
+            tickFormatter={(value) => `₹${value}`}
           />
           <Tooltip
             contentStyle={{ backgroundColor: '#171717', border: '1px solid #262626', borderRadius: '8px' }}

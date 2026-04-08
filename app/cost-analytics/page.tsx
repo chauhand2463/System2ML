@@ -25,11 +25,11 @@ export default async function CostAnalyticsPage() {
     console.error("Error fetching analytics metrics:", e)
   }
 
-  const totalCost = `$${(metrics.total_weekly_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const totalCost = `₹${(metrics.total_weekly_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const costTrend = metrics.cost_trend || '0%'
   const totalCarbon = `${(metrics.avg_carbon || 0).toFixed(3)} kg`
   const carbonTrend = metrics.carbon_trend || '0%'
-  const monthlyEstimate = `$${(metrics.monthly_estimate || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  const monthlyEstimate = `₹${(metrics.monthly_estimate || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
   const stats = [
     {
@@ -139,7 +139,7 @@ export default async function CostAnalyticsPage() {
               </div>
               <div className="flex-1">
                 <h3 className="font-semibold text-white mb-1">Reduce compute for off-peak hours</h3>
-                <p className="text-sm text-neutral-400">Scale down instances between 22:00-06:00 could save ~$1,200/month</p>
+                <p className="text-sm text-neutral-400">Scale down instances between 22:00-06:00 could save ~₹1,00,000/month</p>
               </div>
               <Button variant="outline" size="sm" className="text-white border-neutral-700 hover:bg-neutral-800">
                 Apply

@@ -248,7 +248,7 @@ export default async function DashboardPage() {
                     <Server className="w-4 h-4 text-amber-400" />
                     <p className="text-neutral-500 text-xs">Cost</p>
                   </div>
-                  <p className="text-xl font-bold text-amber-400">${(metrics?.avg_cost || 0).toFixed(2)}</p>
+                  <p className="text-xl font-bold text-amber-400">₹{(metrics?.avg_cost || 0).toFixed(2)}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-neutral-800/30 border border-white/5">
                   <div className="flex items-center gap-2 mb-2">

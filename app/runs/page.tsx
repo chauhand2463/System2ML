@@ -178,7 +178,7 @@ export default function RunsPage() {
                           )}
                           {metrics.cost && (
                             <div className="text-center px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                              <p className="text-amber-400 font-bold">${metrics.cost.toFixed(2)}</p>
+                              <p className="text-amber-400 font-bold">₹{metrics.cost.toFixed(2)}</p>
                               <p className="text-neutral-500 text-xs">Cost</p>
                             </div>
                           )}

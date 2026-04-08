@@ -28,7 +28,7 @@ export function MetricsChart({
       case 'percent':
         return `${value.toFixed(1)}%`
       case 'currency':
-        return `$${value.toFixed(2)}`
+        return `₹${value.toFixed(2)}`
       default:
         return value.toFixed(1)
     }

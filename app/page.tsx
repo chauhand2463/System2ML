@@ -272,7 +272,7 @@ export default function LandingPage() {
               </div>
               <div className="bg-black border border-[#222] rounded-[30px] p-8 flex-1 flex flex-col justify-center">
                 <div className="text-neutral-500 text-sm mb-2">Cost / 10k Inferences</div>
-                <div className="text-4xl font-medium text-white">$0.04 <span className="text-lg text-[#a0a0a0]">USD</span></div>
+                <div className="text-4xl font-medium text-white">₹3.34 <span className="text-lg text-[#a0a0a0]">INR</span></div>
               </div>
             </div>
           </div>

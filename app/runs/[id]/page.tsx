@@ -78,7 +78,7 @@ export default async function RunDetailPage({
     metrics: {
       'Accuracy': backendMetrics.accuracy ? (backendMetrics.accuracy * 100).toFixed(2) + '%' : 'N/A',
       'F1 Score': backendMetrics.f1 ? backendMetrics.f1.toFixed(3) : 'N/A',
-      'Cost ($)': backendMetrics.cost ? backendMetrics.cost.toFixed(2) : 'N/A',
+      'Cost (₹)': backendMetrics.cost ? backendMetrics.cost.toFixed(2) : 'N/A',
       'Carbon (kg)': backendMetrics.carbon ? backendMetrics.carbon.toFixed(3) : 'N/A',
     },
     parameters: {

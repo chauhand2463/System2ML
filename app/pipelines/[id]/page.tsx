@@ -198,7 +198,7 @@ function PipelineDetailContent({ params }: { params: Promise<{ id: string }> }) 
               <>
                 <span className="text-neutral-600">•</span>
                 <span className="text-neutral-400">
-                  Budget: ${pipeline.constraints.max_cost_usd}
+                  Budget: ₹{pipeline.constraints.max_cost_usd}
                 </span>
                 <span className="text-neutral-600">|</span>
                 <span className="text-neutral-400">

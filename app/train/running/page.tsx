@@ -301,8 +301,8 @@ export default function TrainRunningPage() {
                 <DollarSign className="w-4 h-4" />
                 <span className="text-sm">Cost Used</span>
               </div>
-              <p className="text-2xl font-bold text-white">${costUsed.toFixed(2)}</p>
-              <p className="text-xs text-neutral-500">of ${trainingPlan?.plan?.estimated_cost_usd || constraints.maxCostUsd} limit</p>
+              <p className="text-2xl font-bold text-white">₹{costUsed.toFixed(2)}</p>
+              <p className="text-xs text-neutral-500">of ₹{trainingPlan?.plan?.estimated_cost_usd || constraints.maxCostUsd} limit</p>
             </CardContent>
           </Card>
           <Card className="bg-neutral-900/50 border-white/5">

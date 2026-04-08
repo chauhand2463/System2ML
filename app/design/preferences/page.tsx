@@ -103,7 +103,7 @@ export default function DesignPreferencesPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Badge className="bg-brand-500/20 text-brand-400">${constraints.maxCostUsd}</Badge>
+                  <Badge className="bg-brand-500/20 text-brand-400">₹{constraints.maxCostUsd}</Badge>
                   <Badge className="bg-emerald-500/20 text-emerald-400">{constraints.maxCarbonKg}kg</Badge>
                   <Badge className="bg-purple-500/20 text-purple-400">{constraints.maxLatencyMs}ms</Badge>
                 </div>

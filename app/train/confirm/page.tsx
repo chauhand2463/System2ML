@@ -230,7 +230,7 @@ export default function TrainConfirmPage() {
                     <DollarSign className="w-4 h-4" />
                     <span className="text-sm">Est. Cost</span>
                   </div>
-                  <p className="text-2xl font-bold text-white">${selectedPipeline.estimatedCost}</p>
+                  <p className="text-2xl font-bold text-white">₹{selectedPipeline.estimatedCost}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-neutral-800/50">
                   <div className="flex items-center gap-2 text-neutral-400 mb-1">
@@ -297,7 +297,7 @@ export default function TrainConfirmPage() {
                         }`}
                     />
                     <p className="text-sm text-neutral-500">
-                      ${selectedPipeline.estimatedCost} of ${constraints.maxCostUsd} budget
+                      ₹{selectedPipeline.estimatedCost} of ₹{constraints.maxCostUsd} budget
                     </p>
                   </div>
 

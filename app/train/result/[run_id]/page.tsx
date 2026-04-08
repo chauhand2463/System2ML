@@ -231,7 +231,7 @@ print(result)`
                       {trainingStatus?.reason || 'Constraint limits were exceeded during training'}
                     </p>
                     <p className="text-neutral-500 text-xs mt-2">
-                      Cost used: ${run?.costSpent?.toFixed(2) || '0'} | Carbon: {run?.carbonUsed?.toFixed(3) || '0'}kg
+                      Cost used: ₹{run?.costSpent?.toFixed(2) || '0'} | Carbon: {run?.carbonUsed?.toFixed(3) || '0'}kg
                     </p>
                   </div>
                 </div>
@@ -321,9 +321,9 @@ print(result)`
                     <span className="text-sm">Total Cost</span>
                   </div>
                   <p className={`text-2xl font-bold ${finalCostPass ? 'text-emerald-400' : 'text-red-400'}`}>
-                    ${run?.costSpent?.toFixed(2) || '0.00'}
+                    ₹{run?.costSpent?.toFixed(2) || '0.00'}
                   </p>
-                  <p className="text-xs text-neutral-500 mt-1">Limit: ${constraints.maxCostUsd}</p>
+                  <p className="text-xs text-neutral-500 mt-1">Limit: ₹{constraints.maxCostUsd}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-neutral-800/50">
                   <div className="flex items-center gap-2 text-neutral-400 mb-2">

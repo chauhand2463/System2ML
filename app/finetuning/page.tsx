@@ -1212,7 +1212,7 @@ export default function FineTuningPage() {
     { id: 'colab' as Platform, name: 'Google Colab', icon: '🎯', free: true, desc: 'T4/A100 free tier', best: true },
     { id: 'jupyter' as Platform, name: 'Jupyter / Local', icon: '💻', free: true, desc: 'Your own GPU', best: false },
     { id: 'kaggle' as Platform, name: 'Kaggle Notebooks', icon: '📊', free: true, desc: 'P100 free 30h/week', best: false },
-    { id: 'runpod' as Platform, name: 'RunPod', icon: '⚡', free: false, desc: '$0.2/hr GPU cloud', best: false },
+    { id: 'runpod' as Platform, name: 'RunPod', icon: '⚡', free: false, desc: '₹17/hr GPU cloud', best: false },
   ]
 
   const methodInfo = {
@@ -1839,7 +1839,7 @@ export default function FineTuningPage() {
               {[
                 {
                   title: 'HuggingFace Spaces', icon: '🤗', free: true, badge: 'FREE HOSTING',
-                  desc: 'Deploy as a Gradio/Streamlit app. Free CPU tier, GPU from $0.05/hr.',
+                  desc: 'Deploy as a Gradio/Streamlit app. Free CPU tier, GPU from ₹4/hr.',
                   steps: ['Push model to HuggingFace Hub', 'Create a Space', 'Add Gradio inference code', 'Deploy publicly'],
                   link: 'https://huggingface.co/spaces', 
                   cmd: config.method === 'full_ft' 
@@ -1879,7 +1879,7 @@ export default function FineTuningPage() {
                   cmd: config.method === 'full_ft' 
                     ? 'replicate push username/model:v1'
                     : 'replicate push username/model-adapter:v1',
-                  req: config.method === 'full_ft' ? '$5-10 per hour' : '$0.50/hr',
+                  req: config.method === 'full_ft' ? '₹420-840 per hour' : '₹42/hr',
                 },
               ].map(({ title, icon, free, badge, desc, steps, link, cmd, req }) => (
                 <div key={title} className="p-6 rounded-2xl bg-neutral-900/50 border border-white/5 space-y-4">

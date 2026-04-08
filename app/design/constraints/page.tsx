@@ -151,9 +151,9 @@ export default function DesignConstraintsPage() {
             <CardContent className="space-y-6">
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-neutral-400">Max Cost (USD)</Label>
+                  <Label className="text-neutral-400">Max Cost (INR)</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">₹</span>
                     <Input
                       type="number"
                       step="0.1"

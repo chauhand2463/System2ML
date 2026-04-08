@@ -231,7 +231,7 @@ export default function NewPipelinePage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-2">
-                  Max Cost (USD)
+                  Max Cost (INR)
                 </label>
                 <input
                   type="number"
@@ -396,7 +396,7 @@ export default function NewPipelinePage() {
                         </div>
                         <div>
                           <span className="text-neutral-500">Cost</span>
-                          <p className="text-white">${design.estimated_cost}</p>
+                          <p className="text-white">₹{design.estimated_cost}</p>
                         </div>
                         <div>
                           <span className="text-neutral-500">Carbon</span>
