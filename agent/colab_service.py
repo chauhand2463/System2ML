@@ -462,48 +462,71 @@ class ColabTrainingService:
         return self._ai_generator
 
     def create_notebook(
-        self, config: Dict[str, Any], use_ai: bool = False, prefer_local: bool = False
+        self, config: Dict[str, Any], use_ai: bool = True, prefer_local: bool = False
     ) -> str:
-        """Generate Colab notebook JSON using AI or template"""
-        from agent.notebook.generator import NotebookGenerator
-
-        ai_notebook_json = ""
-        generation_method = "template"
-
-        # Try AI generation if enabled
-        if use_ai:
-            try:
-                ai_gen = self._get_ai_generator()
-                ai_notebook_json, generation_method = ai_gen.generate_notebook(
-                    config=config,
-                    prefer_local=prefer_local,
-                )
-                logger.info(
-                    f"AI generation result: method={generation_method}, has_content={bool(ai_notebook_json)}"
-                )
-            except Exception as e:
-                logger.error(f"AI generation error: {e}")
-                generation_method = "error"
-
-        # Generate using NotebookGenerator (handles both AI response and template fallback)
-        try:
-            generator = NotebookGenerator()
-            notebook_json = generator.create_notebook(
-                config=config,
-                ai_generated=bool(ai_notebook_json),
-                ai_response=ai_notebook_json if generation_method != "error" else None,
-            )
-
-            # Add metadata about generation method
-            if generation_method != "template":
-                config["_generation_method"] = generation_method
-
-            return notebook_json
-        except Exception as e:
-            logger.error(f"Notebook generation failed: {e}")
-            raise
-
-        return notebook_json
+        """Generate a Colab notebook JSON.
++
++        * If ``use_ai`` is true, we first attempt AI‑generated notebooks via the
++          ``AINotebookGenerator`` (OpenRouter → Groq → Ollama).
++        * If AI generation fails or ``use_ai`` is false, we fall back to the
++          built‑in hard‑coded templates in ``COLAB_NOTEBOOK_TEMPLATE``.
++        * The chosen generation method is stored in ``config["_generation_method"]``.
++        """
++        from agent.notebook.generator import NotebookGenerator
++
++        ai_notebook_json: str = ""
++        generation_method: str = "template"
++
++        # 1️⃣ Try AI generation when requested
++        if use_ai:
++            try:
++                ai_gen = self._get_ai_generator()
++                ai_notebook_json, generation_method = ai_gen.generate_notebook(
++                    config=config, prefer_local=prefer_local
++                )
++                logger.info(
++                    f"AI generation result: method={generation_method}, has_content={bool(ai_notebook_json)}"
++                )
++            except Exception as e:
++                logger.error(f"AI generation error: {e}")
++                generation_method = "error"
++
++        # 2️⃣ If we have a valid AI notebook, use it; otherwise fallback to template
++        if generation_method != "error" and ai_notebook_json:
++            # Use NotebookGenerator to validate/complete the notebook
++            generator = NotebookGenerator()
++            notebook_json = generator.create_notebook(
++                config=config, ai_generated=True, ai_response=ai_notebook_json
++            )
++        else:
++            # Template fallback – select based on ``method`` (default lora)
++            method_key = config.get("method", "lora").lower()
++            template_str = COLAB_NOTEBOOK_TEMPLATE.get(method_key)
++            if not template_str:
++                raise ValueError(f"No notebook template for method '{method_key}'")
++
++            # Fill placeholders – ``model_name`` may be provided in config; otherwise use model_id
++            model_name = config.get("model_name", config.get("model_id", "unknown"))
++            filled = template_str.format(
++                model_name=model_name,
++                model_id=config.get("model_id", ""),
++                dataset_path=config.get("dataset_path", "dataset.csv"),
++                max_budget=config.get("max_budget", 5),
++                num_epochs=config.get("num_epochs", 3),
++                batch_size=config.get("batch_size", 4),
++                learning_rate=config.get("learning_rate", 2e-4),
++            )
++            # Validate JSON format
++            try:
++                json.loads(filled)
++            except Exception as e:
++                logger.error(f"Template rendering produced invalid JSON: {e}")
++                raise
++            notebook_json = filled
++
++        # Record generation method for downstream callers
++        config["_generation_method"] = generation_method
++        return notebook_json
 
     def create_job(self, config: Dict[str, Any]) -> str:
         """Create a new training job"""

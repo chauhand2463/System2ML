@@ -39,7 +39,7 @@ class TestConstraintsValidation:
                     "value": constraints["max_cost_usd"],
                     "required": 5.0,
                     "severity": "hard",
-                    "message": "Real-time deployment requires at least $5 budget",
+                    "message": "realtime deployment requires at least $5 budget",
                 }
             )
 

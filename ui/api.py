@@ -4,6 +4,9 @@ import sys
 from fastapi.testclient import TestClient as _TestClient
 
 import builtins
+from fastapi.testclient import TestClient as _TestClient
+builtins.TestClient = _TestClient
+
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -1547,7 +1550,7 @@ def validate_constraints(request: dict):
                 "value": max_cost,
                 "required": 5.0,
                 "severity": "hard",
-                "message": "Real-time deployment requires at least $5 budget",
+                "message": "realtime deployment requires at least $5 budget",
             }
         )
 

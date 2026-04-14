@@ -129,7 +129,7 @@ class ConstraintValidator:
                     value=request.constraints.max_cost_usd,
                     required=5.0,
                     severity="hard",
-                    message="Real-time deployment requires at least $5 budget"
+                    message="realtime deployment requires at least $5 budget",
                 ))
             if request.constraints.max_latency_ms > 1000:
                 self.violations.append(ConstraintViolation(
