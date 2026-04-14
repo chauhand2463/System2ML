@@ -577,32 +577,32 @@ def generate_notebook(req: NotebookRequest) -> dict:
     )
     dataset_code = (
         "from datasets import load_dataset\nimport json\n\n"
-        "# ─── OPTION A: HuggingFace Dataset (change to your dataset) ──────────\n"
-        "# dataset = load_dataset('tatsu-lab/alpaca', split='train[:1000]')\n\n"
-        "# ─── OPTION B: Upload local file ─────────────────────────────────────\n"
+        "# TODO: Load your dataset here using the profile information (e.g., CSV, JSONL, HuggingFace).\n"
+        "# # dataset = load_dataset('tatsu-lab/alpaca', split='train[:1000]')\n\n"
+        "# # ─── OPTION B: Upload local file ─────────────────────────────────────\n"
     )
     if is_colab:
         dataset_code += (
-            "# from google.colab import files\n"
-            "# uploaded = files.upload()  # Upload your .jsonl / .csv / .json file\n"
-            "# dataset_file = list(uploaded.keys())[0]\n"
-            "# dataset = load_dataset('json', data_files=dataset_file, split='train')\n\n"
+            "# # from google.colab import files\n"
+            "# # uploaded = files.upload()  # Upload your .jsonl / .csv / .json file\n"
+            "# # dataset_file = list(uploaded.keys())[0]\n"
+            "# # dataset = load_dataset('json', data_files=dataset_file, split='train')\n\n"
         )
     else:
         dataset_code += (
-            "# dataset = load_dataset('json', data_files='./my_data.jsonl', split='train')\n\n"
+            "# # dataset = load_dataset('json', data_files='./my_data.jsonl', split='train')\n\n"
         )
     dataset_code += (
-        "# ─── OPTION C: From pandas / local CSV ───────────────────────────────\n"
-        "# import pandas as pd\n"
-        "# from datasets import Dataset\n"
-        "# df = pd.read_csv('my_data.csv')\n"
-        "# dataset = Dataset.from_pandas(df)\n\n"
-        "# ─── DEMO: Using sample Alpaca data ──────────────────────────────────\n"
-        "dataset = load_dataset('tatsu-lab/alpaca', split='train[:500]')  # 500 samples demo\n"
-        "print(f'✅ Dataset loaded: {len(dataset)} samples')\n"
-        "print(f'   Columns: {dataset.column_names}')\n"
-        "print(f'   Sample: {dataset[0]}')\n"
+        "# # ─── OPTION C: From pandas / local CSV ───────────────────────────────\n"
+        "# # import pandas as pd\n"
+        "# # from datasets import Dataset\n"
+        "# # df = pd.read_csv('my_data.csv')\n"
+        "# # dataset = Dataset.from_pandas(df)\n\n"
+        "# # ─── DEMO: Using sample Alpaca data ──────────────────────────────────\n"
+        "# # dataset = load_dataset('tatsu-lab/alpaca', split='train[:500]')  # 500 samples demo\n"
+        "# # print(f'✅ Dataset loaded: {len(dataset)} samples')\n"
+        "# # print(f'   Columns: {dataset.column_names}')\n"
+        "# # print(f'   Sample: {dataset[0]}')\n"
     )
 
     if req.dataset_format == "alpaca":
@@ -1435,7 +1435,7 @@ def generate_ai_notebook(req: AINotebookRequest):
         model_vram_gb=16,
         method=req.method,
         task_type=profile.task_type if profile and profile.task_type else "causal_lm",
-        dataset_format="alpaca",
+        dataset_format=profile.dataset_format if profile else "alpaca",
         hyperparams=TrainingHyperparams(),
         lora_config=LoRAConfig(
             r=lora_config["r"], alpha=lora_config["alpha"], dropout=lora_config["dropout"]
