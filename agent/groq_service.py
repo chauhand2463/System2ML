@@ -1,29 +1,25 @@
 """
-Groq Service - Stub implementation for System2ML
-Provides AI-powered pipeline explanations using Groq API
+Groq Service - AI-powered pipeline explanations using Groq API
 """
 
 import os
+import json
 import logging
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
-
-HAS_GROQ = False
 
 try:
     from groq import Groq
 
     HAS_GROQ = True
 except ImportError:
+    HAS_GROQ = False
     Groq = None
 
 
 class GroqExplainAgent:
-    """
-    Agent for explaining pipeline designs using Groq's LLM API.
-    This is a stub implementation - replace with actual Groq integration.
-    """
+    """Agent for explaining pipeline designs using Groq's LLM API."""
 
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -36,89 +32,58 @@ class GroqExplainAgent:
 
     def explain(
         self,
-        pipeline_dsl: str,
-        audience: str = "data_scientist",
-        explain_level: str = "medium",
+        pipeline_dsl: Dict[str, Any],
+        audience: str = "product_manager",
+        explain_level: str = "executive",
     ) -> Dict[str, Any]:
-        """
-        Explain a pipeline design in plain language.
-
-        Args:
-            pipeline_dsl: The pipeline definition/DSL
-            audience: Target audience (data_scientist, executive, compliance)
-            explain_level: Detail level (brief, medium, detailed)
-
-        Returns:
-            Dictionary with explanation text and metadata
-        """
+        """Explain a pipeline design with structured output."""
         if not self.client:
-            return {
-                "explanation": self._stub_explanation(pipeline_dsl, audience, explain_level),
-                "audience": audience,
-                "explain_level": explain_level,
-                "model_used": "stub",
-            }
+            return self._stub_explanation(pipeline_dsl, audience, explain_level)
+
+        prompt = f"""You are an ML pipeline explainer. Given this pipeline configuration, explain it for a {audience} audience.
+
+Pipeline: {json.dumps(pipeline_dsl, indent=2)}
+
+Return ONLY valid JSON with these exact fields:
+{{
+  "summary": "2-3 sentence executive summary",
+  "key_tradeoffs": [{{"choice": "", "reason": "", "impact": ""}}],
+  "risk_warnings": [{{"risk": "", "impact": "", "mitigation": ""}}],
+  "deployment_readiness": {{"status": "ready|not_ready", "blockers": [], "next_steps": []}},
+  "ui_blocks": {{"pipeline_graph": true, "cost_meter": true, "carbon_meter": true, "risk_panel": true, "approval_panel": false}}
+}}"""
 
         try:
-            prompt = self._build_prompt(pipeline_dsl, audience, explain_level)
-
             response = self.client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=1024,
+                temperature=0.2,
+                max_tokens=2000,
+                response_format={"type": "json_object"},
             )
-
-            return {
-                "explanation": response.choices[0].message.content,
-                "audience": audience,
-                "explain_level": explain_level,
-                "model_used": "llama-3.1-70b-versatile",
-            }
-
+            result = json.loads(response.choices[0].message.content)
+            result["model_used"] = "llama-3.3-70b-versatile"
+            return result
         except Exception as e:
             logger.error(f"Groq API error: {e}")
-            return {
-                "explanation": self._stub_explanation(pipeline_dsl, audience, explain_level),
-                "audience": audience,
-                "explain_level": explain_level,
-                "model_used": "stub",
-                "error": str(e),
-            }
+            return self._stub_explanation(pipeline_dsl, audience, explain_level)
 
-    def _build_prompt(self, pipeline_dsl: str, audience: str, explain_level: str) -> str:
-        """Build the prompt for the LLM."""
-        level_instructions = {
-            "brief": "Provide a concise 2-3 sentence summary.",
-            "medium": "Explain the key components and their purpose.",
-            "detailed": "Provide a comprehensive explanation including technical details.",
-        }
-
-        audience_context = {
-            "data_scientist": "Focus on technical accuracy and ML concepts.",
-            "executive": "Focus on business value and ROI.",
-            "compliance": "Focus on data governance and regulatory considerations.",
-        }
-
-        return f"""
-Explain the following ML pipeline design:
-
-{pipeline_dsl}
-
-Audience: {audience} ({audience_context.get(audience, "")})
-Detail Level: {explain_level} - {level_instructions.get(explain_level, "")}
-
-Provide your explanation in a clear, structured format.
-"""
-
-    def _stub_explanation(self, pipeline_dsl: str, audience: str, explain_level: str) -> str:
+    def _stub_explanation(self, pipeline_dsl: Dict, audience: str, explain_level: str) -> Dict:
         """Fallback explanation when Groq is not available."""
-        if explain_level == "brief":
-            return f"Pipeline design for {audience} audience (level: {explain_level})."
-        elif explain_level == "medium":
-            return f"This pipeline processes data through multiple stages including preprocessing, model training, and evaluation. Designed for {audience} audience."
-        else:
-            return f"This comprehensive pipeline includes data ingestion, feature engineering, model selection, training with validation, and deployment stages. Suitable for {audience} with detailed technical components."
+        return {
+            "summary": "Pipeline explanation unavailable. Configure GROQ_API_KEY for AI-powered explanations.",
+            "key_tradeoffs": [],
+            "risk_warnings": [],
+            "deployment_readiness": {"status": "unknown", "blockers": [], "next_steps": []},
+            "ui_blocks": {
+                "pipeline_graph": True,
+                "cost_meter": True,
+                "carbon_meter": True,
+                "risk_panel": True,
+                "approval_panel": False,
+            },
+            "model_used": "stub",
+        }
 
     @staticmethod
     def is_available() -> bool:

@@ -72,6 +72,8 @@ def init_db():
             deployment TEXT NOT NULL,
             retraining TEXT NOT NULL,
             status TEXT DEFAULT 'draft',
+            nodes TEXT,
+            edges TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )

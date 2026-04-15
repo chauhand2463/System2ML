@@ -25,12 +25,12 @@ class AIDesignService:
         self.ollama_available = False
         self.ollama_models: List[str] = []
         self.ollama_model = "llama3.1:8b"
-        
+
         self._check_ollama()
-        
+
         if self.api_key:
             self.groq_client = Groq(api_key=self.api_key)
-            
+
         if self.openrouter_key:
             self.openrouter_client = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
@@ -278,16 +278,17 @@ Return ONLY valid JSON in this exact format:
         except json.JSONDecodeError:
             import re
 
-            # Non-greedy regex for better JSON extraction
-            json_match = re.search(r"\{.*?\}", content, re.DOTALL)
-            if json_match:
+            start = content.find("{")
+            end = content.rfind("}")
+            if start != -1 and end != -1 and end > start:
                 try:
-                    return json.loads(json_match.group())
+                    data = json.loads(content[start : end + 1])
+                    if "pipeline" in data or "decision_summary" in data:
+                        return data
                 except:
                     pass
 
-            # Try to find JSON with required keys
-            matches = re.findall(r"\{.*?\}", content, re.DOTALL)
+            matches = re.findall(r"\{[^{}]*\}", content)
             for match in matches:
                 try:
                     data = json.loads(match)
@@ -300,22 +301,67 @@ Return ONLY valid JSON in this exact format:
             return self._generate_fallback(dataset, constraints)
 
     def _generate_fallback(self, dataset: Dict, constraints: Dict) -> Dict[str, Any]:
-        """Fallback deterministic generation"""
+        """Fallback deterministic generation with smarter algorithm selection"""
         task_type = dataset.get("label_type", "classification")
         cost_limit = constraints.get("max_cost_usd", 10)
+        carbon_limit = constraints.get("max_carbon_kg", 1.0)
+        max_latency = constraints.get("max_latency_ms", 1000)
+
+        num_features = dataset.get("num_features", 10)
+        num_rows = dataset.get("rows", 1000)
 
         algorithm = "random_forest"
-        if cost_limit < 3:
+        resource_class = "standard"
+        estimated_accuracy = 0.82
+        estimated_latency = 100
+
+        if num_rows > 100000:
+            if cost_limit < 3:
+                algorithm = "logistic_regression"
+                estimated_accuracy = 0.75
+                estimated_latency = 30
+            elif cost_limit < 10:
+                algorithm = "random_forest"
+                estimated_accuracy = 0.82
+                estimated_latency = 100
+            else:
+                algorithm = "xgboost"
+                estimated_accuracy = 0.86
+                estimated_latency = 150
+        elif num_features > 50:
+            algorithm = "xgboost"
+            resource_class = "large"
+            estimated_accuracy = 0.87
+            estimated_latency = 200
+        elif cost_limit < 3:
             algorithm = "logistic_regression"
+            estimated_accuracy = 0.78
+            estimated_latency = 50
         elif cost_limit > 20:
             algorithm = "xgboost"
+            estimated_accuracy = 0.88
+            estimated_latency = 180
+        elif task_type == "regression":
+            algorithm = "random_forest"
+            estimated_accuracy = 0.80
+
+        if max_latency < 100:
+            algorithm = "logistic_regression"
+            estimated_latency = 30
+
+        if carbon_limit < 0.1:
+            algorithm = "logistic_regression"
 
         return {
             "status": "success",
             "decision_summary": {
                 "task_type": task_type,
                 "recommended_model_family": algorithm,
-                "rationale": [f"Selected {algorithm} for cost-effective {task_type}"],
+                "rationale": [
+                    f"Selected {algorithm} based on dataset size ({num_rows} rows, {num_features} features)",
+                    f"Cost constraint: ${cost_limit}, Carbon limit: {carbon_limit}kg",
+                    f"Estimated accuracy: {estimated_accuracy}, Latency: {estimated_latency}ms",
+                ],
             },
             "pipeline": {
                 "data_ingestion": {
@@ -327,10 +373,14 @@ Return ONLY valid JSON in this exact format:
                 "model_training": {
                     "algorithm": algorithm,
                     "hyperparam_strategy": "grid",
-                    "resource_class": "standard",
+                    "resource_class": resource_class,
                 },
                 "evaluation": {"metrics": ["accuracy", "f1"], "cross_validation": True},
-                "deployment": {"mode": "batch", "format": "pickle", "latency_budget_ms": 1000},
+                "deployment": {
+                    "mode": "batch",
+                    "format": "pickle",
+                    "latency_budget_ms": estimated_latency,
+                },
                 "monitoring": {
                     "drift": ["accuracy"],
                     "data_quality": ["missing"],
@@ -343,7 +393,7 @@ Return ONLY valid JSON in this exact format:
             },
             "cost_estimate": {"monthly_usd": min(cost_limit * 0.8, 8), "confidence": 0.9},
             "carbon_estimate": {
-                "monthly_kg": min(constraints.get("max_carbon_kg", 1) * 0.5, 0.5),
+                "monthly_kg": min(carbon_limit * 0.5, 0.5),
                 "confidence": 0.9,
             },
             "risk_register": [],
@@ -353,10 +403,10 @@ Return ONLY valid JSON in this exact format:
     def generate_notebook(self, config: Dict[str, Any]) -> str:
         """Generate AI-powered Colab notebook using the specialized notebook generator"""
         from agent.notebook.ai_generator import get_ai_generator
-        
+
         ai_gen = get_ai_generator()
         result, method = ai_gen.generate_notebook(config, prefer_local=False)
-        
+
         if result:
             logger.info(f"[Notebook] Generated via {method}")
             return result
@@ -530,7 +580,7 @@ Generate COMPLETE valid JSON notebook. Return ONLY JSON starting with {{ and end
                         "prompt": full_prompt,
                         "stream": False,
                     },
-                    timeout=600, # Increased timeout for large models
+                    timeout=600,  # Increased timeout for large models
                 )
                 if response.status_code == 200:
                     result = response.json()
@@ -557,7 +607,7 @@ Generate COMPLETE valid JSON notebook. Return ONLY JSON starting with {{ and end
         for model in available:
             if "gpt-oss:20b" in model.lower() or "gpt-oss" in model.lower():
                 return model
-        
+
         # Prefer larger models
         for model in available:
             if "70b" in model.lower():
@@ -570,25 +620,23 @@ Generate COMPLETE valid JSON notebook. Return ONLY JSON starting with {{ and end
         """Parse AI response to notebook JSON with improved extraction"""
         try:
             data = json.loads(content)
-            # Validate notebook format
             if "cells" not in data or "metadata" not in data:
                 raise ValueError("Invalid notebook format - missing required keys")
             return json.dumps(data, indent=2)
         except (json.JSONDecodeError, ValueError):
             import re
 
-            # Find JSON with cells key
-            json_match = re.search(r'\{[\s\S]*"cells"[\s\S]*\}', content)
-            if json_match:
+            start = content.find("{")
+            end = content.rfind("}")
+            if start != -1 and end != -1 and end > start:
                 try:
-                    data = json.loads(json_match.group())
+                    data = json.loads(content[start : end + 1])
                     if "cells" in data:
                         return json.dumps(data, indent=2)
                 except:
                     pass
 
-            # Non-greedy approach
-            matches = re.findall(r"\{.*?\}", content, re.DOTALL)
+            matches = re.findall(r"\{[^{}]*\}", content)
             for match in matches:
                 try:
                     data = json.loads(match)

@@ -92,6 +92,7 @@
 ### Training Options
 - 💻 **Local GPU Training** - Train on your machine
 - ☁️ **Google Colab** - Auto-generate notebooks for cloud GPU training
+- 🎯 **On-Platform Fine-Tuning** - Real-time training with Celery/Redis (optional)
 
 ### Pipeline Designer
 - 🎨 Visual DAG editor with drag-and-drop
@@ -160,6 +161,8 @@
 - Node.js 18+
 - Python 3.10+
 - npm or pnpm
+- Redis (for on-platform fine-tuning)
+- GPU (optional, for local training)
 
 ### Installation
 
@@ -175,6 +178,21 @@ pip install -e ".[all]"
 npm install
 # or
 pnpm install
+```
+
+### Optional: On-Platform Fine-Tuning
+
+For real on-platform fine-tuning (requires Redis + Celery):
+
+```bash
+# Install Celery and Redis dependencies
+pip install celery redis
+
+# Start Redis
+redis-server
+
+# Start Celery worker (separate terminal)
+celery -A agent.tasks worker --loglevel=info
 ```
 
 ### Environment Variables
@@ -245,6 +263,20 @@ npm run dev
 | POST | `/api/training/{run_id}/stop` | Stop training |
 | POST | `/api/training/plan` | Plan training |
 | POST | `/api/training/colab/create` | Create Colab notebook |
+| GET | `/api/training/gpu-status` | Check GPU availability |
+
+### Fine-Tuning API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/finetuning/start-platform` | Start on-platform fine-tuning (requires Celery) |
+| GET | `/api/finetuning/status/{task_id}` | Get training progress |
+
+### Monitoring API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/monitoring/drift` | Get drift monitoring data |
 
 ### Pipeline API
 
@@ -252,6 +284,7 @@ npm run dev
 |--------|----------|-------------|
 | GET | `/api/pipelines` | List pipelines |
 | GET | `/api/pipelines/{id}` | Get pipeline |
+| PUT | `/api/pipelines/{id}/nodes` | Save pipeline nodes/edges |
 | POST | `/api/pipelines/{id}/execute` | Execute pipeline |
 | GET | `/api/runs` | List runs |
 
