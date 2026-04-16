@@ -66,6 +66,20 @@ class PrometheusConfig(BaseModel):
     push_gateway: Optional[str] = None
 
 
+class CeleryConfig(BaseModel):
+    broker_url: str = Field(
+        default_factory=lambda: _get_env("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    )
+    result_backend: str = Field(
+        default_factory=lambda: _get_env("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+    )
+    task_serializer: str = "json"
+    result_serializer: str = "json"
+    accept_content: list[str] = ["json"]
+    timezone: str = "UTC"
+    enable_utc: bool = True
+
+
 class DatabaseConfig(BaseModel):
     url: str = Field(default_factory=lambda: _get_env("DATABASE_URL", "sqlite:///system2ml.db"))
     pool_size: int = Field(default_factory=lambda: _get_env("DB_POOL_SIZE", "5", int))
@@ -79,6 +93,7 @@ class System2MLConfig(BaseModel):
     mlflow: MLflowConfig = Field(default_factory=MLflowConfig)
     carbon: CarbonConfig = Field(default_factory=CarbonConfig)
     prometheus: PrometheusConfig = Field(default_factory=PrometheusConfig)
+    celery: CeleryConfig = Field(default_factory=CeleryConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 
     class Config:
@@ -99,6 +114,7 @@ __all__ = [
     "MLflowConfig",
     "CarbonConfig",
     "PrometheusConfig",
+    "CeleryConfig",
     "DatabaseConfig",
     "System2MLConfig",
     "default_config",

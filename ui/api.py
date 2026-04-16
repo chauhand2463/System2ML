@@ -96,6 +96,21 @@ except ImportError:
 
 app = FastAPI(title="System2ML API", version="0.2.0")
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize Redis connection on startup."""
+    import redis
+
+    try:
+        CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+        r = redis.from_url(CELERY_BROKER_URL)
+        r.ping()
+        logger.info(f"Redis connected successfully: {CELERY_BROKER_URL}")
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}. Fine-tuning background tasks require Redis.")
+
+
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, Set
 import asyncio

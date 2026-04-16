@@ -1,20 +1,25 @@
 @echo off
-echo ========================================
-echo   System2ML - Starting Project
-echo ========================================
+echo ==============================================================
+echo  System2ML - Quick Start
+echo ==============================================================
 echo.
 
-echo [1/2] Starting Backend API on port 8000...
-start "System2ML Backend" cmd /k "cd /d G:\Projects\System2ML && python -m ui.api"
-timeout /t 3 /nobreak > nul
-
-echo [2/2] Starting Frontend on port 3000...
-cd /d G:\Projects\System2ML
-npm run dev
-
+echo [1] Starting Redis...
+docker start redis
+docker exec redis redis-cli ping
 echo.
-echo ========================================
-echo   System2ML is running!
-echo   - API: http://localhost:8000
-echo   - Frontend: http://localhost:3000
-echo ========================================
+
+echo [2] Starting Celery Worker...
+start "Celery" cmd /k "cd /d G:\Projects\System2ML && celery -A agent.tasks worker --loglevel=info"
+echo.
+
+echo [3] Starting API Server...
+start "API" cmd /k "cd /d G:\Projects\System2ML && python -m ui.api"
+echo.
+
+echo ==============================================================
+echo  All services starting in new windows...
+echo  Wait ~10 seconds then test at:
+echo    http://localhost:8000
+echo ==============================================================
+pause

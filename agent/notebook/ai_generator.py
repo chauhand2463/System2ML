@@ -306,10 +306,8 @@ DO NOT include markdown wrappers like ```json.
     def _parse_ai_response(self, text: str) -> Optional[str]:
         """Parse AI response to extract JSON notebook."""
         try:
-            # Try to find JSON in the response
             text = text.strip()
 
-            # Find JSON start
             start_idx = text.find("{")
             end_idx = text.rfind("}")
 
@@ -319,20 +317,59 @@ DO NOT include markdown wrappers like ```json.
 
             json_str = text[start_idx : end_idx + 1]
 
-            # Validate it's valid notebook JSON
-            nb = json.loads(json_str)
+            try:
+                nb = json.loads(json_str)
+                if "cells" in nb:
+                    return json.dumps(nb, indent=2)
+                return json.dumps({"cells": nb}, indent=2)
+            except json.JSONDecodeError as e:
+                # Try to fix common issues like missing commas
+                fixed_json = self._fix_incomplete_json(json_str)
+                if fixed_json:
+                    nb = json.loads(fixed_json)
+                    if "cells" in nb:
+                        return json.dumps(nb, indent=2)
+                    return json.dumps({"cells": nb}, indent=2)
+                logger.error(f"Failed to parse AI response as JSON: {e}")
+                return None
 
-            if "cells" in nb:
-                return json.dumps(nb, indent=2)
-
-            # Try to wrap in cells format
-            return json.dumps({"cells": nb}, indent=2)
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI response as JSON: {e}")
-            return None
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
+            return None
+
+    def _fix_incomplete_json(self, json_str: str) -> Optional[str]:
+        """Attempt to fix incomplete JSON by adding missing braces and fixing common issues."""
+        try:
+            # Try to find a valid prefix of the JSON that can be parsed
+            # Count braces to find where we might be truncated
+            brace_count = 0
+            last_complete = len(json_str)
+
+            for i, char in enumerate(json_str):
+                if char == "{":
+                    brace_count += 1
+                elif char == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        last_complete = i + 1
+                        break
+
+            # Try parsing up to the last complete object
+            if last_complete < len(json_str):
+                try:
+                    return json_str[:last_complete]
+                except:
+                    pass
+
+            # Try adding missing closing braces
+            open_count = json_str.count("{") - json_str.count("}")
+            if open_count > 0:
+                json_str += "}" * open_count
+
+            json.loads(json_str)
+            return json_str
+
+        except:
             return None
 
     def get_available_backends(self) -> Dict[str, bool]:
