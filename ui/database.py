@@ -254,6 +254,9 @@ def get_db():
     return sqlite3.connect(DB_PATH)
 
 
+    return uuid.uuid4().hex
+
+
 @dataclass
 class PipelineStore:
     @staticmethod

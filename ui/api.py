@@ -2555,13 +2555,70 @@ class ColabTrainingRequest(BaseModel):
 
 @app.post("/api/training/colab/create")
 def create_colab_training(request: ColabTrainingRequest):
-    """Create a new Colab training job with AI-generated notebook"""
+    logger.info(f"Colab training request received: {request.dict()}")
+    # Validate required fields in request
+    if (
+        not isinstance(request.dataset_profile, dict)
+        or not isinstance(request.training_target, dict)
+        or not isinstance(request.constraints, dict)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid request body: expected JSON with 'dataset_profile', 'training_target', and 'constraints' as objects.",
+        )
+    # Ensure training_target includes a base_model
+    if not request.training_target.get("base_model"):
+        raise HTTPException(status_code=400, detail="'training_target.base_model' is required.")
+    # Ensure at least one dataset identifier is provided
+    dp = request.dataset_profile
+    if not (dp.get("file_path") or dp.get("file_name") or dp.get("dataset_url")):
+        raise HTTPException(
+            status_code=400,
+            detail="Dataset must be provided via 'file_path', 'file_name', or 'dataset_url'.",
+        )
+    # Existing logic continues
     try:
         from agent.ai_service import get_ai_service
 
         ai = get_ai_service()
 
         training_target = request.training_target or {}
+        dataset_profile = request.dataset_profile or {}
+
+        # Resolve dataset source (uploaded file, file name in uploads, or remote URL)
+        # Prefer an explicit file_path if supplied
+        dataset_path = dataset_profile.get("file_path", "")
+        # If only a file_name is provided (from /api/datasets/upload), construct the expected path
+        if not dataset_path and dataset_profile.get("file_name"):
+            dataset_path = os.path.join("uploads", dataset_profile["file_name"])
+            dataset_profile["file_path"] = dataset_path
+        # If a remote URL is provided, download the dataset into the uploads folder
+        if not dataset_path and dataset_profile.get("dataset_url"):
+            import urllib.request
+
+            url = dataset_profile["dataset_url"]
+            try:
+                response = urllib.request.urlopen(url)
+                data = response.read()
+                uploads_dir = "uploads"
+                os.makedirs(uploads_dir, exist_ok=True)
+                filename = f"{uuid.uuid4().hex}_{os.path.basename(url)}"
+                file_path = os.path.join(uploads_dir, filename)
+                with open(file_path, "wb") as f:
+                    f.write(data)
+                dataset_path = file_path
+                dataset_profile["file_path"] = file_path
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to download dataset from URL: {str(e)}",
+                )
+        # After resolution, ensure we have a valid local file
+        if not dataset_path or not os.path.exists(dataset_path):
+            raise HTTPException(
+                status_code=400,
+                detail="Dataset not available. Upload a file via /api/datasets/upload, provide a file_name that exists in uploads/, or supply a valid dataset_url.",
+            )
 
         # Validate model type - only LLMs supported for Colab
         model_type = training_target.get("model_type", "llm")
@@ -2609,6 +2666,8 @@ def create_colab_training(request: ColabTrainingRequest):
             "lora_alpha": training_target.get("lora_alpha", 32),
             "lora_dropout": training_target.get("lora_dropout", 0.05),
             "dataset": request.dataset_profile,
+            "dataset_path": dataset_profile.get("file_path", ""),
+            "dataset_name": dataset_profile.get("file_name", "dataset.csv"),
             "constraints": request.constraints or {},
             "dataset_url": training_target.get("dataset_url", ""),
             "dataset_format": training_target.get("dataset_format", "alpaca"),

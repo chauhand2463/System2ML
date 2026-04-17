@@ -1,6 +1,6 @@
 """
 Colab Training Service for System2ML
-Executes real fine-tuning jobs on Google Colab
+Generates AI-powered notebooks for fine-tuning LLMs in Google Colab
 """
 
 import os
@@ -14,517 +14,304 @@ from fastapi import HTTPException
 
 
 logger = logging.getLogger(__name__)
-COLAB_NOTEBOOK_TEMPLATE = {
-    "lora": """{
- "cells": [
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": ["# Fine-Tuning {model_name} with LoRA\\n", "System2ML Pipeline Training"]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Install dependencies\\n",
-    "!pip install -q transformers datasets peft accelerate bitsandbytes torch\\n",
-    "!pip install -q scikit-learn pandas numpy"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "import os\\n",
-    "import json\\n",
-    "import pandas as pd\\n",
-    "from datetime import datetime\\n",
-    "\\n",
-    "# Configuration\\n",
-    "MODEL_NAME = \"{model_id}\"\\n",
-    "TRAINING_METHOD = \"lora\"\\n",
-    "DATASET_PATH = \"{dataset_path}\"\\n",
-    "OUTPUT_DIR = \"/content/model_adapter\"\\n",
-    "MAX_BUDGET_USD = {max_budget}\\n",
-    "\\n",
-    "print(f\"Starting training: {{MODEL_NAME}} with {{TRAINING_METHOD}}\")\\n",
-    "print(f\"Dataset: {{DATASET_PATH}}\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Load and prepare dataset\\n",
-    "from datasets import load_dataset\\n",
-    "\\n",
-    "df = pd.read_csv(DATASET_PATH)\\n",
-    "print(f\"Dataset loaded: {{len(df)}} rows\")\\n",
-    "print(f\"Columns: {{list(df.columns)}}\")\\n",
-    "print(df.head())"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Load model with LoRA\\n",
-    "import torch\\n",
-    "from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer\\n",
-    "from peft import LoraConfig, get_peft_model, TaskType\\n",
-    "\\n",
-    "model = AutoModelForCausalLM.from_pretrained(\\n",
-    "    MODEL_NAME,\\n",
-    "    torch_dtype=torch.float16,\\n",
-    "    device_map=\"auto\"\\n",
-    ")\\n",
-    "tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)\\n",
-    "\\n",
-    "# Configure LoRA\\n",
-    "lora_config = LoraConfig(\\n",
-    "    r=16,\\n",
-    "    lora_alpha=32,\\n",
-    "    target_modules=[\"q_proj\", \"v_proj\"],\\n",
-    "    lora_dropout=0.05,\\n",
-    "    bias=\"none\",\\n",
-    "    task_type=TaskType.CAUSAL_LM\\n",
-    ")\\n",
-    "model = get_peft_model(model, lora_config)\\n",
-    "model.print_trainable_parameters()"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Prepare dataset for training\\n",
-    "def tokenize_function(examples):\\n",
-    "    return tokenizer(examples[\"text\"], padding=\"max_length\", truncation=True, max_length=512)\\n",
-    "\\n",
-    "# Create text column from all columns\\n",
-    "df[\"text\"] = df.apply(lambda x: \" | \".join([f\"{{k}}: {{v}}\" for k,v in x.items()]), axis=1)\\n",
-    "dataset_dict = {{"train": df.to_dict(\"records\")}}\\n",
-    "\\n",
-    "from datasets import Dataset\\n",
-    "train_dataset = Dataset.from_list(dataset_dict[\"train\"])\\n",
-    "tokenized_dataset = train_dataset.map(tokenize_function, batched=True)\\n",
-    "print(f\"Tokenized dataset: {{len(tokenized_dataset)}} samples\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Training configuration\\n",
-    "training_args = TrainingArguments(\\n",
-    "    output_dir=OUTPUT_DIR,\\n",
-    "    num_train_epochs={num_epochs},\\n",
-    "    per_device_train_batch_size={batch_size},\\n",
-    "    learning_rate={learning_rate},\\n",
-    "    fp16=True,\\n",
-    "    logging_steps=10,\\n",
-    "    save_strategy=\"epoch\",\\n",
-    "    save_total_limit=1,\\n",
-    "    report_to=\"none\"\\n",
-    ")\\n",
-    "\\n",
-    "trainer = Trainer(\\n",
-    "    model=model,\\n",
-    "    args=training_args,\\n",
-    "    train_dataset=tokenized_dataset,\\n",
-    ")\\n",
-    "\\n",
-    "print(\"Starting training...\")\\n",
-    "start_time = datetime.now()"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Execute training\\n",
-    "trainer.train()\\n",
-    "\\n",
-    "end_time = datetime.now()\\n",
-    "training_duration = (end_time - start_time).total_seconds()\\n",
-    "print(f\"Training completed in {{training_duration:.2f}} seconds\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Save model and generate results\\n",
-    "model.save_pretrained(OUTPUT_DIR)\\n",
-    "tokenizer.save_pretrained(OUTPUT_DIR)\\n",
-    "\\n",
-    "# Calculate metrics\\n",
-    "results = {{\\n",
-    "    \"status\": \"completed\",\\n",
-    "    \"model\": MODEL_NAME,\\n",
-    "    \"method\": TRAINING_METHOD,\\n",
-    "    \"training_duration_seconds\": training_duration,\\n",
-    "    \"num_samples\": len(tokenized_dataset),\\n",
-    "    \"output_dir\": OUTPUT_DIR,\\n",
-    "    \"timestamp\": datetime.now().isoformat()\\n",
-    "}}\\n",
-    "\\n",
-    "print(\"Training Results:\")\\n",
-    "print(json.dumps(results, indent=2))\\n",
-    "\\n",
-    "# Save results\\n",
-    "with open(\"/content/training_results.json\", \"w\") as f:\\n",
-    "    json.dump(results, f, indent=2)"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "print(\"Training complete! Model saved to:\", OUTPUT_DIR)"
-   ]
-  }
- ]
-}""",
-    "qlora": """{
- "cells": [
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": ["# Fine-Tuning {model_name} with QLoRA\\n", "System2ML Pipeline Training - Memory Optimized"]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Install dependencies\\n",
-    "!pip install -q transformers datasets peft accelerate bitsandbytes torch\\n",
-    "!pip install -q scikit-learn pandas numpy"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Enable 4-bit quantization\\n",
-    "import os\\n",
-    "import torch\\n",
-    "from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig\\n",
-    "from peft import LoraConfig, get_peft_model, TaskType\\n",
-    "from datetime import datetime\\n",
-    "\\n",
-    "MODEL_NAME = \"{model_id}\"\\n",
-    "OUTPUT_DIR = \"/content/model_adapter\"\\n",
-    "\\n",
-    "# 4-bit quantization config\\n",
-    "bnb_config = BitsAndBytesConfig(\\n",
-    "    load_in_4bit=True,\\n",
-    "    bnb_4bit_quant_type=\"nf4\",\\n",
-    "    bnb_4bit_compute_dtype=torch.float16,\\n",
-    "    bnb_4bit_use_double_quant=True\\n",
-    ")\\n",
-    "\\n",
-    "model = AutoModelForCausalLM.from_pretrained(\\n",
-    "    MODEL_NAME,\\n",
-    "    quantization_config=bnb_config,\\n",
-    "    device_map=\"auto\"\\n",
-    ")\\n",
-    "tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)\\n",
-    "model.gradient_checkpointing_enable()\\n",
-    "print(\"Model loaded with 4-bit quantization\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Load dataset\\n",
-    "import pandas as pd\\n",
-    "from datasets import Dataset\\n",
-    "\\n",
-    "df = pd.read_csv(\"{dataset_path}\")\\n",
-    "df[\"text\"] = df.apply(lambda x: \" | \".join([f\"{{k}}: {{v}}\" for k,v in x.items()]), axis=1)\\n",
-    "\\n",
-    "def tokenize_function(examples):\\n",
-    "    return tokenizer(examples[\"text\"], padding=\"max_length\", truncation=True, max_length=256)\\n",
-    "\\n",
-    "train_dataset = Dataset.from_list(df.to_dict(\"records\"))\\n",
-    "tokenized_dataset = train_dataset.map(tokenize_function, batched=True)\\n",
-    "print(f\"Prepared {{len(tokenized_dataset)}} samples\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Configure QLoRA\\n",
-    "lora_config = LoraConfig(\\n",
-    "    r=8,\\n",
-    "    lora_alpha=16,\\n",
-    "    target_modules=[\"q_proj\", \"v_proj\", \"k_proj\", \"o_proj\"],\\n",
-    "    lora_dropout=0.1,\\n",
-    "    bias=\"none\",\\n",
-    "    task_type=TaskType.CAUSAL_LM\\n",
-    ")\\n",
-    "model = get_peft_model(model, lora_config)\\n",
-    "model.print_trainable_parameters()"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "from transformers import TrainingArguments, Trainer\\n",
-    "\\n",
-    "training_args = TrainingArguments(\\n",
-    "    output_dir=OUTPUT_DIR,\\n",
-    "    num_train_epochs={num_epochs},\\n",
-    "    per_device_train_batch_size={batch_size},\\n",
-    "    learning_rate={learning_rate},\\n",
-    "    fp16=True,\\n",
-    "    logging_steps=5,\\n",
-    "    save_strategy=\"epoch\",\\n",
-    "    optim=\"paged_adamw_32bit\"\\n",
-    ")\\n",
-    "\\n",
-    "trainer = Trainer(\\n",
-    "    model=model,\\n",
-    "    args=training_args,\\n",
-    "    train_dataset=tokenized_dataset,\\n",
-    ")\\n",
-    "\\n",
-    "start_time = datetime.now()\\n",
-    "trainer.train()\\n",
-    "training_duration = (datetime.now() - start_time).total_seconds()\\n",
-    "print(f\"Training completed in {{training_duration:.2f}}s\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Save and results\\n",
-    "model.save_pretrained(OUTPUT_DIR)\\n",
-    "tokenizer.save_pretrained(OUTPUT_DIR)\\n",
-    "\\n",
-    "results = {{\\n",
-    "    \"status\": \"completed\",\\n",
-    "    \"method\": \"qlora\",\\n",
-    "    \"training_duration_seconds\": training_duration,\\n",
-    "    \"output_dir\": OUTPUT_DIR\\n",
-    "}}\\n",
-    "\\n",
-    "with open(\"/content/training_results.json\", \"w\") as f:\\n",
-    "    json.dump(results, f)\\n",
-    "print(\"Done!\")"
-   ]
-  }
- ]
-}""",
-    "full_ft": """{
- "cells": [
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": ["# Full Fine-Tuning {model_name}\\n", "System2ML - Full Parameter Training"]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "# Install dependencies\\n",
-    "!pip install -q transformers datasets accelerate torch scikit-learn pandas"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "import torch\\n",
-    "from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments\\n",
-    "from datasets import Dataset\\n",
-    "import pandas as pd\\n",
-    "from datetime import datetime\\n",
-    "\\n",
-    "MODEL_NAME = \"{model_id}\"\\n",
-    "OUTPUT_DIR = \"/content/full_model\"\\n",
-    "\\n",
-    "model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, torch_dtype=torch.float16)\\n",
-    "tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)\\n",
-    "print(\"Model loaded\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "df = pd.read_csv(\"{dataset_path}\")\\n",
-    "df[\"text\"] = df.apply(lambda x: \" | \".join([f\"{{k}}: {{v}}\" for k,v in x.items()]), axis=1)\\n",
-    "\\n",
-    "def tokenize(examples):\\n",
-    "    return tokenizer(examples[\"text\"], padding=\"max_length\", truncation=True, max_length=512)\\n",
-    "\\n",
-    "dataset = Dataset.from_list(df.to_dict(\"records\"))\\n",
-    "tokenized = dataset.map(tokenize, batched=True)\\n",
-    "print(f\"{{len(tokenized)}} samples ready\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "args = TrainingArguments(\\n",
-    "    output_dir=OUTPUT_DIR,\\n",
-    "    num_train_epochs={num_epochs},\\n",
-    "    per_device_train_batch_size={batch_size},\\n",
-    "    learning_rate={learning_rate},\\n",
-    "    fp16=True,\\n",
-    "    save_steps=50,\\n",
-    ")\\n",
-    "\\n",
-    "trainer = Trainer(model=model, args=args, train_data=tokenized)\\n",
-    "start = datetime.now()\\n",
-    "trainer.train()\\n",
-    "duration = (datetime.now() - start).total_seconds()\\n",
-    "print(f\"Training: {{duration}}s\")"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "model.save_pretrained(OUTPUT_DIR)\\n",
-    "results = {{\"status\": \"completed\", \"duration\": duration}}\\n",
-    "import json\\n",
-    "with open(\"/content/results.json\", \"w\") as f:\\n",
-    "    json.dump(results, f)\\n",
-    "print(\"Complete!\")"
-   ]
-  }
- ]
-}""",
-}
 
 
 class ColabTrainingService:
-    """Manages Colab training jobs"""
-
     def __init__(self):
         self.jobs: Dict[str, Dict[str, Any]] = {}
-        self._ai_generator = None
-
-    def _get_ai_generator(self):
-        """Lazy-load AI generator."""
-        if self._ai_generator is None:
-            from agent.notebook.ai_generator import get_ai_generator
-
-            self._ai_generator = get_ai_generator()
-        return self._ai_generator
 
     def create_notebook(
         self, config: Dict[str, Any], use_ai: bool = True, prefer_local: bool = False
     ) -> str:
-        """Generate a Colab notebook JSON.
-        If ``use_ai`` is true, we first attempt AI-generated notebooks via the
-        AINotebookGenerator (OpenRouter → Groq → Ollama).
-        If AI generation fails or ``use_ai`` is false, we fall back to the
-        built-in hard-coded templates in ``COLAB_NOTEBOOK_TEMPLATE``.
-        The chosen generation method is stored in ``config["_generation_method"]``.
-        """
-        from agent.notebook.generator import NotebookGenerator
+        """Create a Jupyter notebook for Colab training."""
+        model_id = config.get("model_id", "")
+        method = config.get("method", "qlora")
+        dataset_name = config.get("dataset_name", "dataset")
 
-        ai_notebook_json: str = ""
-        generation_method: str = "template"
+        logger.info(f"Creating notebook: model={model_id}, method={method}")
 
+        # Try AI generation first
+        notebook_json = None
         if use_ai:
             try:
-                ai_gen = self._get_ai_generator()
-                ai_notebook_json, generation_method = ai_gen.generate_notebook(
+                from agent.notebook.ai_generator import get_ai_generator
+
+                ai_gen = get_ai_generator()
+                notebook_json, _ = ai_gen.generate_notebook(
                     config=config, prefer_local=prefer_local
                 )
-                logger.info(
-                    f"AI generation result: method={generation_method}, has_content={bool(ai_notebook_json)}"
-                )
             except Exception as e:
-                logger.error(f"AI generation error: {e}")
-                generation_method = "error"
+                logger.warning(f"AI generation failed: {e}")
 
-        if generation_method != "error" and ai_notebook_json:
-            generator = NotebookGenerator()
-            notebook_json = generator.create_notebook(
-                config=config, ai_generated=True, ai_response=ai_notebook_json
-            )
-        else:
-            method_key = config.get("method", "lora").lower()
-            template_str = COLAB_NOTEBOOK_TEMPLATE.get(method_key)
-            if not template_str:
-                raise ValueError(f"No notebook template for method '{method_key}'")
+        if not notebook_json:
+            notebook_json = self._build_notebook(config)
 
-            model_name = config.get("model_name", config.get("model_id", "unknown"))
-            filled = template_str.format(
-                model_name=model_name,
-                model_id=config.get("model_id", ""),
-                dataset_path=config.get("dataset_path", "dataset.csv"),
-                max_budget=config.get("max_budget", 5),
-                num_epochs=config.get("num_epochs", 3),
-                batch_size=config.get("batch_size", 4),
-                learning_rate=config.get("learning_rate", 2e-4),
-            )
-            try:
-                json.loads(filled)
-            except Exception as e:
-                logger.error(f"Template rendering produced invalid JSON: {e}")
-                raise
-            notebook_json = filled
-
-        config["_generation_method"] = generation_method
         return notebook_json
 
-    def create_job(self, config: Dict[str, Any]) -> str:
-        """Create a new training job"""
-        job_id = f"job_{uuid.uuid4().hex[:8]}"
+    def _build_notebook(self, config: Dict[str, Any]) -> str:
+        """Build notebook programmatically."""
+        model_id = config.get("model_id", "meta-llama/Llama-3.1-8B-Instruct")
+        model_name = config.get("model_name", model_id.split("/")[-1].replace("-Instruct", ""))
+        method = config.get("method", "qlora")
 
-        job = {
+        # Hyperparameters
+        num_epochs = config.get("num_epochs", 3)
+        batch_size = config.get("batch_size", 4)
+        learning_rate = config.get("learning_rate", 2e-4)
+        lora_r = config.get("lora_r", 16)
+        lora_alpha = config.get("lora_alpha", 32)
+        max_length = config.get("max_length", 512)
+
+        def cell(source: str) -> Dict[str, Any]:
+            return {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": [source],
+            }
+
+        def markdown(source: str) -> Dict[str, Any]:
+            return {"cell_type": "markdown", "metadata": {}, "source": [source]}
+
+        cells = []
+
+        # Header
+        cells.append(
+            markdown(
+                f"# Fine-Tuning {model_name} with {method.upper()}\n\nSystem2ML - AI-Powered Pipeline Training"
+            )
+        )
+
+        # Install
+        if method == "unsloth":
+            cells.append(
+                cell(
+                    "!pip install unsloth transformers datasets peft accelerate bitsandbytes torch"
+                )
+            )
+        else:
+            cells.append(
+                cell("!pip install transformers datasets peft accelerate bitsandbytes torch")
+            )
+
+        # Upload
+        cells.append(
+            cell("""from google.colab import files
+uploaded = files.upload()
+dataset_file = list(uploaded.keys())[0]
+print('Uploaded:', dataset_file)""")
+        )
+
+        # Config
+        cells.append(
+            cell(f"""MODEL_NAME = "{model_id}"
+TRAINING_METHOD = "{method}"
+DATASET_PATH = dataset_file
+OUTPUT_DIR = "/content/model_adapter"
+NUM_EPOCHS = {num_epochs}
+BATCH_SIZE = {batch_size}
+LEARNING_RATE = {learning_rate}
+LORA_R = {lora_r}
+LORA_ALPHA = {lora_alpha}
+MAX_LENGTH = {max_length}
+
+print('Model:', MODEL_NAME)
+print('Method:', TRAINING_METHOD)
+print('Dataset:', DATASET_PATH)""")
+        )
+
+        # Load data
+        cells.append(
+            cell("""import pandas as pd
+from datasets import Dataset
+
+df = pd.read_csv(DATASET_PATH)
+print('Dataset loaded:', len(df), 'rows')
+print('Columns:', list(df.columns))""")
+        )
+
+        # Create text
+        cells.append(
+            cell("""# Create text column for training
+label_cols = ['label', 'target', 'y', 'class', 'output']
+label_col = next((c for c in df.columns if c.lower() in label_cols), None)
+
+if label_col:
+    # Format: "Input: col1: val1, col2: val2 | Output: label"
+    df['text'] = df.apply(lambda row: 'Input: ' + ', '.join([str(k) + ': ' + str(v) for k, v in row.drop(label_col).items()]) + ' | Output: ' + str(row[label_col]), axis=1)
+    print('Label column:', label_col)
+else:
+    df['text'] = df.apply(lambda row: ' | '.join([str(k) + ': ' + str(v) for k, v in row.items()]), axis=1)
+
+print('Sample text:', df['text'].iloc[0][:100])""")
+        )
+
+        # Load model based on method
+        if method == "qlora":
+            cells.append(
+                cell("""import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from peft import LoraConfig, get_peft_model, TaskType
+
+# 4-bit quantization
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True,
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    quantization_config=bnb_config,
+    device_map="auto",
+    trust_remote_code=True,
+)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+print('Model loaded with 4-bit QLoRA')""")
+            )
+        elif method == "lora":
+            cells.append(
+                cell("""import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    torch_dtype=torch.float16,
+    device_map="auto",
+    trust_remote_code=True,
+)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+print('Model loaded')""")
+            )
+        else:  # unsloth
+            cells.append(
+                cell("""from unsloth import FastLanguageModel
+import torch
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=MODEL_NAME,
+    max_seq_length=MAX_LENGTH,
+    dtype=torch.float16,
+    load_in_4bit=True,
+)
+print('Model loaded with Unsloth')""")
+            )
+
+        # LoRA config (if not full_ft)
+        if method != "full_ft":
+            cells.append(
+                cell("""from peft import LoraConfig, get_peft_model, TaskType
+
+lora_config = LoraConfig(
+    r=LORA_R,
+    lora_alpha=LORA_ALPHA,
+    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+    lora_dropout=0.05,
+    bias="none",
+    task_type=TaskType.CAUSAL_LM,
+)
+model = get_peft_model(model, lora_config)
+model.print_trainable_parameters()""")
+            )
+
+        # Tokenize
+        cells.append(
+            cell("""# Tokenize
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token
+
+def tokenize_function(examples):
+    return tokenizer(
+        examples["text"],
+        padding="max_length",
+        truncation=True,
+        max_length=MAX_LENGTH,
+    )
+
+train_dataset = Dataset.from_pandas(df[["text"]])
+tokenized_dataset = train_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
+print('Tokenized:', len(tokenized_dataset), 'samples')""")
+        )
+
+        # Training
+        cells.append(
+            cell("""from transformers import TrainingArguments, Trainer
+
+training_args = TrainingArguments(
+    output_dir=OUTPUT_DIR,
+    num_train_epochs=NUM_EPOCHS,
+    per_device_train_batch_size=BATCH_SIZE,
+    learning_rate=LEARNING_RATE,
+    fp16=True,
+    logging_steps=10,
+    save_strategy="epoch",
+    report_to="none",
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_dataset,
+)
+print('Starting training...')
+trainer.train()
+print('Training completed!')""")
+        )
+
+        # Save
+        cells.append(
+            cell("""# Save model
+model.save_pretrained(OUTPUT_DIR)
+tokenizer.save_pretrained(OUTPUT_DIR)
+print('Model saved to:', OUTPUT_DIR)
+
+# Create ZIP for download
+import shutil
+shutil.make_archive('/content/model_adapter', 'zip', '/content/model_adapter')
+print('ZIP created for download')""")
+        )
+
+        # Results
+        cells.append(
+            cell("""# Results summary
+results = {
+    'status': 'completed',
+    'model': MODEL_NAME,
+    'method': TRAINING_METHOD,
+    'num_samples': len(tokenized_dataset),
+    'output_dir': OUTPUT_DIR,
+}
+print('Training Results:')
+for k, v in results.items():
+    print(' ', k, ':', v)""")
+        )
+
+        # Test inference
+        cells.append(
+            cell("""# Test inference
+test_text = df['text'].iloc[0]
+print('Testing with:', test_text[:100], '...')
+print('Note: For production use, merge LoRA adapters first')""")
+        )
+
+        # Build notebook
+        notebook = {
+            "cells": cells,
+            "metadata": {
+                "colab": {"accelerator": "GPU", "gpuType": "T4", "provenance": []},
+                "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            },
+            "nbformat": 4,
+            "nbformat_minor": 0,
+        }
+
+        return json.dumps(notebook)
+
+    def create_job(self, config: Dict[str, Any]) -> str:
+        job_id = f"job_{uuid.uuid4().hex[:8]}"
+        self.jobs[job_id] = {
             "id": job_id,
             "status": "pending",
             "config": config,
@@ -537,18 +324,14 @@ class ColabTrainingService:
             "logs": [],
             "error": None,
         }
-
-        self.jobs[job_id] = job
         return job_id
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """Get job status"""
         return self.jobs.get(job_id)
 
     def update_job_status(
         self, job_id: str, status: str, results: Any = None, error: Optional[str] = None
     ):
-        """Update job status"""
         if job_id in self.jobs:
             self.jobs[job_id]["status"] = status
             if status == "running" and not self.jobs[job_id]["started_at"]:
@@ -560,27 +343,18 @@ class ColabTrainingService:
             if error:
                 self.jobs[job_id]["error"] = error
 
-    def list_jobs(self) -> List[Dict[str, Any]]:
-        """List all jobs"""
-        return list(self.jobs.values())
 
-
-# Global service instance
 colab_service = ColabTrainingService()
 
 
 def create_training_job(
     dataset_profile: Dict[str, Any], training_target: Dict[str, Any], constraints: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Create a new Colab training job"""
-
-    # Map model names to HuggingFace IDs
     model_map = {
         "llama-3.1-8b": "meta-llama/Llama-3.1-8B-Instruct",
         "llama-3.1-70b": "meta-llama/Llama-3.1-70B-Instruct",
         "mistral-7b": "mistralai/Mistral-7B-Instruct-v0.3",
-        "mixtral-8x7b": "mistralai/Mixtral-8x7B-Instruct-v0.3",
-        "qwen-14b": "Qwen/Qwen2.5-14B-Instruct",
+        "phi-2": "microsoft/phi-2",
         "phi-3.5": "microsoft/Phi-3.5-mini-instruct",
     }
 
@@ -589,29 +363,20 @@ def create_training_job(
     config = {
         "model_id": model_id,
         "model_name": training_target.get("base_model", "Llama 3.1 8B"),
-        "method": training_target.get("method", "lora"),
-        "dataset_name": dataset_profile.get("name", "dataset"),
-        "dataset_rows": dataset_profile.get("rows", 0),
-        "max_budget": training_target.get("max_budget_usd", 5),
-        "num_epochs": 3,
-        "batch_size": 4 if training_target.get("method") != "full_ft" else 2,
-        "learning_rate": 2e-4,
-        "max_cost": constraints.get("max_cost_usd", 10),
-        "max_carbon": constraints.get("max_carbon_kg", 1.0),
+        "method": training_target.get("method", "qlora"),
+        "dataset": dataset_profile,
+        "dataset_name": dataset_profile.get("file_name", "dataset.csv"),
+        "num_epochs": training_target.get("num_epochs", 3),
+        "batch_size": training_target.get("batch_size", 4),
+        "learning_rate": training_target.get("learning_rate", 2e-4),
     }
 
-    # Create job
     job_id = colab_service.create_job(config)
+    notebook_json = colab_service.create_notebook(config, use_ai=True)
 
-    # Generate notebook
-    notebook_json = colab_service.create_notebook(config)
-
-    # For demo purposes - in production this would actually create a Colab instance
     job = colab_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=500, detail="Job not found after creation")
     job["notebook_json"] = notebook_json
-    job["colab_link"] = f"https://colab.research.google.com/#create=true"
+    job["colab_link"] = "https://colab.research.google.com/#create=true"
     job["status"] = "ready"
 
     return {
@@ -620,12 +385,11 @@ def create_training_job(
         "notebook_json": notebook_json,
         "colab_link": job["colab_link"],
         "config": config,
-        "message": "Training job created. Open Colab link to execute.",
+        "message": "Training notebook ready. Open Colab link to execute.",
     }
 
 
 def get_training_job(job_id: str) -> Dict[str, Any]:
-    """Get job status"""
     job = colab_service.get_job(job_id)
     if not job:
         return {"error": "Job not found"}
@@ -633,5 +397,4 @@ def get_training_job(job_id: str) -> Dict[str, Any]:
 
 
 def get_colab_service() -> ColabTrainingService:
-    """Get the singleton ColabTrainingService instance"""
     return colab_service

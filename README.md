@@ -220,7 +220,7 @@ GITHUB_CLIENT_SECRET=your_github_client_secret
 npm run dev:all
 
 # Or run them separately:
-# Terminal 1 - Backend
+# Terminal 1 - Backend  
 python -m uvicorn ui.api:app --reload --port 8000
 
 # Terminal 2 - Frontend
