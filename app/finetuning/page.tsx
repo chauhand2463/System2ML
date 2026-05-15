@@ -990,6 +990,7 @@ export default function FineTuningPage() {
   const [converterTargetFormat, setConverterTargetFormat] = useState<typeof CONVERTER_FORMATS[number]>('jsonl')
   const [converterFile, setConverterFile] = useState<File | null>(null)
   const [conversionProgress, setConversionProgress] = useState(0)
+  const [conversionError, setConversionError] = useState<string | null>(null)
   const [modelComparison, setModelComparison] = useState<{base: any; fine_tuned: any} | null>(null)
   const [datasetFile, setDatasetFile] = useState<File | null>(null)
   const [datasetFileName, setDatasetFileName] = useState<string>('')
@@ -1068,7 +1069,8 @@ export default function FineTuningPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dataset_profile: {
-            name: config.dataset_url || 'training_data',
+            file_name: config.dataset_url || config.dataset_file?.name || 'training_data.csv',
+            name: config.dataset_url || config.dataset_file?.name || 'training_data',
             type: config.dataset_format || 'text',
             label_type: config.task_type,
             rows: config.dataset_preview?.length || 0,
@@ -2313,6 +2315,7 @@ print(response)`}</pre>
                 <Button onClick={async () => {
                   if (!converterFile) return
                   setConversionProgress(10)
+                  setConversionError(null)
                   try {
                     const formData = new FormData()
                     formData.append('file', converterFile)
@@ -2326,9 +2329,32 @@ print(response)`}</pre>
                     })
                     
                     setConversionProgress(70)
-                    if (!response.ok) throw new Error('Conversion failed')
+                    if (!response.ok) {
+                      const errorData = await response.json().catch(() => ({}))
+                      throw new Error(errorData.detail || `Server error: ${response.status}`)
+                    }
                     
-                    const blob = await response.blob()
+                    const contentType = response.headers.get('content-type') || ''
+                    if (!contentType.includes('application/json') && !contentType.includes('text/') && !contentType.includes('octet-stream')) {
+                      const blob = await response.blob()
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = converterFile.name.replace(/\.[^.]+$/, `.${converterTargetFormat}`)
+                      a.click()
+                      URL.revokeObjectURL(url)
+                      
+                      setConversionProgress(100)
+                      return
+                    }
+                    
+                    const text = await response.text()
+                    if (text.startsWith('{') || text.startsWith('[')) {
+                      const data = JSON.parse(text)
+                      throw new Error(data.detail || 'Conversion failed')
+                    }
+                    
+                    const blob = new Blob([text], { type: contentType || 'application/octet-stream' })
                     const url = URL.createObjectURL(blob)
                     const a = document.createElement('a')
                     a.href = url
@@ -2337,14 +2363,23 @@ print(response)`}</pre>
                     URL.revokeObjectURL(url)
                     
                     setConversionProgress(100)
-                  } catch (err) {
+                  } catch (err: any) {
                     console.error('Conversion error:', err)
-                    alert('Failed to convert dataset. Please try again.')
+                    setConversionError(err.message || 'Failed to convert dataset. Please check your file format.')
                     setConversionProgress(0)
                   }
                 }} disabled={!converterFile || conversionProgress > 0} className="w-full bg-brand-500 hover:bg-brand-600">
                   <RefreshCw className={cn("w-4 h-4 mr-2", conversionProgress > 0 && "animate-spin")} /> Convert Dataset
                 </Button>
+
+                {conversionError && (
+                  <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                    <div className="flex items-center gap-2 text-red-400">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="font-medium text-sm">{conversionError}</span>
+                    </div>
+                  </div>
+                )}
 
                 {conversionProgress > 0 && (
                   <div className="space-y-2">

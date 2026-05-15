@@ -573,17 +573,22 @@ export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave 
     
     setIsGenerating(true)
     try {
-      const response = await fetch('/api/groq/design', {
+      const response = await fetch('/api/pipeline/design', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nodes,
-          edges,
-          pipeline_name: pipelineName,
+          nodes: nodes || [],
+          edges: edges || [],
+          pipeline_name: pipelineName || 'pipeline',
         }),
       })
 
-      if (!response.ok) throw new Error('Generation failed')
+      console.log('Pipeline design response status:', response.status)
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Response error:', errorText)
+        throw new Error(`Generation failed: ${response.status} ${errorText}`)
+      }
 
       const result = await response.json()
       
@@ -611,6 +616,10 @@ export function PipelineDesigner({ initialNodes = [], initialEdges = [], onSave 
       }
     } catch (err) {
       console.error('Generation error:', err)
+      // Show more details about the error
+      if (err instanceof Error) {
+        console.error('Error message:', err.message)
+      }
     } finally {
       setIsGenerating(false)
     }

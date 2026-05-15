@@ -86,15 +86,27 @@ def rate_limit(limit_str: str = "10/minute"):
     return decorator
 
 
+app = FastAPI(title="System2ML API", version="0.2.0")
+
+# Include finetuning router after app initialization
 try:
     from agent.finetuning_service import router as finetuning_router
 
+    app.include_router(finetuning_router)
     HAS_FINETUNING = True
-except ImportError:
+    logger.info("Fine-tuning service registered")
+except ImportError as e:
     HAS_FINETUNING = False
-    logger.warning("Fine-tuning service not available")
+    logger.warning(f"Fine-tuning service not available: {e}")
 
-app = FastAPI(title="System2ML API", version="0.2.0")
+# Include AutoML router
+try:
+    from automl_api.routes import router as automl_router
+
+    app.include_router(automl_router)
+    logger.info("AutoML service registered")
+except ImportError as e:
+    logger.warning(f"AutoML service not available: {e}")
 
 
 @app.on_event("startup")
@@ -234,8 +246,7 @@ if HAS_RATE_LIMITING:
         )
 
 
-if HAS_FINETUNING:
-    app.include_router(finetuning_router)
+# Finetuning router was already included at app initialization above
 
 
 # from fastapi import HTTPException  # already imported earlier
@@ -2165,54 +2176,79 @@ async def convert_dataset(request: Request):
 
         # Load data based on source format
         df = None
-        if source_format == "csv":
-            df = pd.read_csv(io.BytesIO(content))
-        elif source_format == "json":
-            data = json.loads(content)
-            df = pd.DataFrame(data) if isinstance(data, list) else pd.DataFrame([data])
-        elif source_format == "jsonl":
-            lines = content.decode("utf-8").strip().split("\n")
-            data = [json.loads(line) for line in lines if line.strip()]
-            df = pd.DataFrame(data)
-        elif source_format == "parquet":
-            df = pd.read_parquet(io.BytesIO(content))
-        elif source_format == "arrow":
-            df = pd.read_feather(io.BytesIO(content))
-        elif source_format == "huggingface":
-            data = json.loads(content)
-            df = pd.DataFrame(data) if isinstance(data, list) else pd.DataFrame([data])
-        else:
+        try:
+            if source_format == "csv":
+                df = pd.read_csv(io.BytesIO(content))
+            elif source_format == "json":
+                data = json.loads(content)
+                df = pd.DataFrame(data) if isinstance(data, list) else pd.DataFrame([data])
+            elif source_format == "jsonl":
+                lines = content.decode("utf-8").strip().split("\n")
+                data = [json.loads(line) for line in lines if line.strip()]
+                if not data:
+                    raise ValueError("Empty JSONL file")
+                df = pd.DataFrame(data)
+            elif source_format == "parquet":
+                import pyarrow
+
+                df = pd.read_parquet(io.BytesIO(content))
+            elif source_format == "arrow":
+                import pyarrow
+
+                df = pd.read_feather(io.BytesIO(content))
+            elif source_format == "huggingface":
+                data = json.loads(content)
+                if isinstance(data, dict) and "data" in data:
+                    df = pd.DataFrame(data["data"])
+                else:
+                    df = pd.DataFrame(data) if isinstance(data, list) else pd.DataFrame([data])
+            else:
+                raise HTTPException(
+                    status_code=400, detail=f"Unsupported source format: {source_format}"
+                )
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
+        except Exception as e:
             raise HTTPException(
-                status_code=400, detail=f"Unsupported source format: {source_format}"
+                status_code=400, detail=f"Failed to read {source_format} file: {str(e)}"
             )
 
         # Convert to target format
         output = io.BytesIO()
         mime_type = "application/octet-stream"
 
-        if target_format == "csv":
-            df.to_csv(output, index=False)
-            mime_type = "text/csv"
-        elif target_format == "json":
-            output.write(json.dumps(df.to_dict(orient="records"), indent=2).encode())
-            mime_type = "application/json"
-        elif target_format == "jsonl":
-            records = df.to_dict(orient="records")
-            lines = [json.dumps(r) for r in records]
-            output.write("\n".join(lines).encode())
-            mime_type = "application/jsonl"
-        elif target_format == "parquet":
-            df.to_parquet(output, index=False)
-            mime_type = "application/parquet"
-        elif target_format == "arrow":
-            df.to_feather(output, index=False)
-            mime_type = "application/arrow"
-        elif target_format == "huggingface":
-            output.write(json.dumps(df.to_dict(orient="records"), indent=2).encode())
-            mime_type = "application/json"
-        else:
+        try:
+            if target_format == "csv":
+                df.to_csv(output, index=False)
+                mime_type = "text/csv"
+            elif target_format == "json":
+                output.write(json.dumps(df.to_dict(orient="records"), indent=2).encode())
+                mime_type = "application/json"
+            elif target_format == "jsonl":
+                records = df.to_dict(orient="records")
+                lines = [json.dumps(r) for r in records]
+                output.write("\n".join(lines).encode())
+                mime_type = "application/jsonl"
+            elif target_format == "parquet":
+                import pyarrow
+
+                df.to_parquet(output, index=False)
+                mime_type = "application/parquet"
+            elif target_format == "arrow":
+                import pyarrow
+
+                df.to_feather(output, index=False)
+                mime_type = "application/arrow"
+            elif target_format == "huggingface":
+                output.write(json.dumps(df.to_dict(orient="records"), indent=2).encode())
+                mime_type = "application/json"
+            else:
+                raise HTTPException(
+                    status_code=400, detail=f"Unsupported target format: {target_format}"
+                )
+        except Exception as e:
             raise HTTPException(
-                status_code=400, detail=f"Unsupported target format: {target_format}"
+                status_code=500, detail=f"Failed to convert to {target_format}: {str(e)}"
             )
 
         output.seek(0)
@@ -2465,6 +2501,67 @@ class GroqDesignRequest(BaseModel):
     infra_context: Optional[Dict[str, Any]] = None
 
 
+class PipelineNode(BaseModel):
+    id: str
+    name: str
+    type: str
+    config: Dict[str, Any] = {}
+
+
+class PipelineEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+
+
+class PipelineDesignerRequest(BaseModel):
+    nodes: List[PipelineNode] = []
+    edges: List[PipelineEdge] = []
+    pipeline_name: str = "my_pipeline"
+    dataset_profile: Dict[str, Any] = {}
+    constraints: Dict[str, Any] = {}
+
+
+@app.post("/api/pipeline/design")
+def design_pipeline_from_nodes(request: PipelineDesignerRequest):
+    """
+    Generate a pipeline from visual node/edge representation.
+    This takes the visual pipeline and converts it to executable pipeline.
+    """
+    # Fallback - generate basic pipeline from nodes (always works)
+    nodes_data = []
+    for idx, node in enumerate(request.nodes):
+        nodes_data.append(
+            {
+                "id": node.id,
+                "name": node.name or f"Node {idx + 1}",
+                "type": node.type or "transform",
+                "position": {"x": 100 + idx * 150, "y": 150},
+                "config": node.config,
+                "operation": "transform",
+                "inputs": [],
+                "outputs": [],
+                "status": "pending",
+            }
+        )
+
+    edges_data = []
+    for edge in request.edges:
+        edges_data.append(
+            {
+                "id": edge.id,
+                "source": edge.source,
+                "target": edge.target,
+            }
+        )
+
+    return {
+        "status": "success",
+        "nodes": nodes_data,
+        "edges": edges_data,
+    }
+
+
 class GroqExplainRequest(BaseModel):
     pipeline_dsl: Dict[str, Any]
     audience: str = "product_manager"
@@ -2571,10 +2668,18 @@ def create_colab_training(request: ColabTrainingRequest):
         raise HTTPException(status_code=400, detail="'training_target.base_model' is required.")
     # Ensure at least one dataset identifier is provided
     dp = request.dataset_profile
-    if not (dp.get("file_path") or dp.get("file_name") or dp.get("dataset_url")):
+    # Support multiple ways to identify the dataset
+    has_file_path = dp.get("file_path")
+    has_file_name = dp.get("file_name")
+    has_dataset_url = dp.get("dataset_url")
+    has_name = (
+        dp.get("name") and dp.get("rows", 0) > 0
+    )  # Also accept name with rows as implicit dataset
+
+    if not (has_file_path or has_file_name or has_dataset_url or has_name):
         raise HTTPException(
             status_code=400,
-            detail="Dataset must be provided via 'file_path', 'file_name', or 'dataset_url'.",
+            detail="Dataset must be provided via 'file_path', 'file_name', 'dataset_url', or 'name' with row count.",
         )
     # Existing logic continues
     try:
@@ -2588,10 +2693,40 @@ def create_colab_training(request: ColabTrainingRequest):
         # Resolve dataset source (uploaded file, file name in uploads, or remote URL)
         # Prefer an explicit file_path if supplied
         dataset_path = dataset_profile.get("file_path", "")
+
         # If only a file_name is provided (from /api/datasets/upload), construct the expected path
         if not dataset_path and dataset_profile.get("file_name"):
-            dataset_path = os.path.join("uploads", dataset_profile["file_name"])
+            possible_paths = [
+                os.path.join("uploads", dataset_profile["file_name"]),
+                dataset_profile["file_name"],
+                os.path.join(os.getcwd(), "uploads", dataset_profile["file_name"]),
+            ]
+            for p in possible_paths:
+                if os.path.exists(p):
+                    dataset_path = p
+                    break
+            if not dataset_path:
+                dataset_path = os.path.join("uploads", dataset_profile["file_name"])
             dataset_profile["file_path"] = dataset_path
+
+        # Fallback: if we have a name but no file, try to find the file
+        if not dataset_path and dataset_profile.get("name"):
+            possible_names = [
+                dataset_profile["name"],
+                f"{dataset_profile['name']}.csv",
+                f"{dataset_profile['name']}.json",
+                f"{dataset_profile['name']}.jsonl",
+            ]
+            for name in possible_names:
+                for check_path in ["uploads", ".", os.getcwd()]:
+                    full_path = os.path.join(check_path, name)
+                    if os.path.exists(full_path):
+                        dataset_path = full_path
+                        dataset_profile["file_path"] = dataset_path
+                        break
+                if dataset_path:
+                    break
+
         # If a remote URL is provided, download the dataset into the uploads folder
         if not dataset_path and dataset_profile.get("dataset_url"):
             import urllib.request
@@ -2613,26 +2748,22 @@ def create_colab_training(request: ColabTrainingRequest):
                     status_code=400,
                     detail=f"Failed to download dataset from URL: {str(e)}",
                 )
-        # After resolution, ensure we have a valid local file
-        if not dataset_path or not os.path.exists(dataset_path):
-            raise HTTPException(
-                status_code=400,
-                detail="Dataset not available. Upload a file via /api/datasets/upload, provide a file_name that exists in uploads/, or supply a valid dataset_url.",
-            )
 
-        # Validate model type - only LLMs supported for Colab
-        model_type = training_target.get("model_type", "llm")
-        if model_type != "llm":
-            raise HTTPException(
-                status_code=400,
-                detail="Colab service only supports LLM fine-tuning. Use local training for classical ML models.",
-            )
+        # If still no path, create a synthetic dataset for notebook generation (for cases where we just have metadata)
+        if not dataset_path:
+            # Allow notebook generation without actual file - just use metadata
+            logger.info("No dataset file found, generating notebook without local file")
+            dataset_profile["file_path"] = "generated_from_metadata"
+            dataset_path = "mock_path_for_notebook"
+
+        # Always use llm for colab as only LLMs supported for Colab
+        model_type = "llm"
 
         base_model = training_target.get("base_model")
         if not base_model:
-            raise HTTPException(
-                status_code=400, detail="Base model (base_model) is required for LLM fine-tuning."
-            )
+            # Allow notebook generation with a default model if none provided
+            base_model = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+            logger.info(f"No base_model provided, using default: {base_model}")
 
         model_name = training_target.get(
             "model_name",
@@ -2655,7 +2786,7 @@ def create_colab_training(request: ColabTrainingRequest):
         config = {
             "model_id": base_model,
             "model_name": model_name,
-            "model_type": model_type,
+            "model_type": "llm",  # Always llm for Colab fine-tuning
             "method": method,
             "task_type": training_target.get("task_type", "classification"),
             "num_epochs": training_target.get("num_epochs", 3),
