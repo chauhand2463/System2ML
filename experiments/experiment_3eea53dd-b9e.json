@@ -1,0 +1,76 @@
+{
+  "experiment_id": "3eea53dd-b9e",
+  "dataset_id": "e7f129fb-b02",
+  "task_type": "regression",
+  "target_column": "salary",
+  "models": [
+    "Linear Regression",
+    "Random Forest",
+    "XGBoost"
+  ],
+  "results": {
+    "12f69f20-531": {
+      "model_name": "Linear Regression",
+      "metrics": {
+        "mse": 1207299527.9155,
+        "rmse": 34746.216,
+        "mae": 22886.6373,
+        "r2_score": -8.2239
+      },
+      "feature_importance": {
+        "name": 5668.845956427053,
+        "age": 648.6202923286337,
+        "experience": 3316.792751843326,
+        "education": 1078.638157790378,
+        "skills": 6227.653365003154,
+        "location": 3856.3066134953283,
+        "department": 1038.8462511741832,
+        "performance": 9512.874118873995
+      }
+    },
+    "97e29d65-51c": {
+      "model_name": "Random Forest",
+      "metrics": {
+        "mse": 12541933.3333,
+        "rmse": 3541.4592,
+        "mae": 2713.3333,
+        "r2_score": 0.9042
+      },
+      "feature_importance": {
+        "name": 0.02535112487413311,
+        "age": 0.2714919592917182,
+        "experience": 0.27139083214279813,
+        "education": 0.07093531919469848,
+        "skills": 0.02955063072421527,
+        "location": 0.08649217704755395,
+        "department": 0.09408806006657766,
+        "performance": 0.15069989665830522
+      }
+    },
+    "f40bd08a-0f0": {
+      "model_name": "XGBoost",
+      "metrics": {
+        "mse": 210063952.0,
+        "rmse": 14493.5831,
+        "mae": 13805.957,
+        "r2_score": -0.6049
+      },
+      "feature_importance": {
+        "name": 0.0018905402394011617,
+        "age": 0.8281150460243225,
+        "experience": 0.16613349318504333,
+        "education": 0.0,
+        "skills": 0.0,
+        "location": 0.0,
+        "department": 0.0,
+        "performance": 0.0038609409239143133
+      }
+    }
+  },
+  "best_model": {
+    "model_name": "Linear Regression",
+    "reason": "Best overall performance with r2_score of -8.2239",
+    "confidence": 0.95
+  },
+  "created_at": "2026-05-15T04:30:42.089408"
+}

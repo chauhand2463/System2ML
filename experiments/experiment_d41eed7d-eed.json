@@ -1,0 +1,36 @@
+{
+  "experiment_id": "d41eed7d-eed",
+  "dataset_id": "e7f129fb-b02",
+  "task_type": "regression",
+  "target_column": "salary",
+  "models": [
+    "Linear Regression"
+  ],
+  "results": {
+    "6ac10882-89f": {
+      "model_name": "Linear Regression",
+      "metrics": {
+        "mse": 1207299527.9155,
+        "rmse": 34746.216,
+        "mae": 22886.6373,
+        "r2_score": -8.2239
+      },
+      "feature_importance": {
+        "name": 5668.845956427053,
+        "age": 648.6202923286337,
+        "experience": 3316.792751843326,
+        "education": 1078.638157790378,
+        "skills": 6227.653365003154,
+        "location": 3856.3066134953283,
+        "department": 1038.8462511741832,
+        "performance": 9512.874118873995
+      }
+    }
+  },
+  "best_model": {
+    "model_name": "Linear Regression",
+    "reason": "Best overall performance with r2_score of -8.2239",
+    "confidence": 0.9
+  },
+  "created_at": "2026-05-15T04:30:24.848689"
+}

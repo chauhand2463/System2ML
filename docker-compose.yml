@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # Frontend (Next.js)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+
+  # Backend (FastAPI)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - DATABASE_URL=sqlite:///./system2ml.db
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    volumes:
+      - ./:/app
+      - uploads:/app/uploads
+      - experiments:/app/experiments
+      - models:/app/models
+      - reports:/app/reports
+
+  # Redis (for Celery tasks)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Nginx (reverse proxy)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  uploads:
+  experiments:
+  models:
+  reports:
+  redis_data:
+
+networks:
+  default:
+    name: system2ml_network

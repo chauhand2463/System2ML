@@ -19,6 +19,16 @@ export const API_ENDPOINTS = {
   PROJECTS: `${API_BASE}/api/projects`,
   TRAINING_PLAN: `${API_BASE}/api/training/plan`,
   TRAINING_START: `${API_BASE}/api/training/start`,
+  // AutoML endpoints
+  AUTOML_DATASETS: `${API_BASE}/api/automl/datasets`,
+  AUTOML_DATASET_UPLOAD: `${API_BASE}/api/automl/datasets/upload`,
+  AUTOML_EXPERIMENTS: `${API_BASE}/api/automl/experiments`,
+  AUTOML_MODELS_AVAILABLE: `${API_BASE}/api/automl/models/available`,
+  AUTOML_COMPARE: (expId: string) => `${API_BASE}/api/automl/compare/${expId}`,
+  AUTOML_DEPLOY: (modelId: string) => `${API_BASE}/api/automl/deploy/${modelId}`,
+  AUTOML_DEPLOYMENTS: `${API_BASE}/api/automl/deployments`,
+  AUTOML_PREDICT: `${API_BASE}/api/automl/predict`,
+  AUTOML_REPORTS: (expId: string) => `${API_BASE}/api/automl/reports/${expId}`,
 };
 
 // Helper function to check if API is configured
@@ -1203,6 +1213,134 @@ export async function executeRealTraining(request: RealTrainingRequest): Promise
 
 export async function getGPUStatus(): Promise<{ available: boolean; name?: string; memory?: string }> {
   const response = await fetch('/api/training/gpu-status');
+  return response.json();
+}
+
+// AutoML API functions
+export interface AutoMLDataset {
+  dataset_id: string;
+  name: string;
+  rows: number;
+  columns: number;
+  features: string[];
+  target_column?: string;
+  task_type: string;
+  analysis?: Record<string, unknown>;
+}
+
+export interface AutoMLExperiment {
+  experiment_id: string;
+  status: string;
+  dataset_id: string;
+  task_type: string;
+  models_trained: string[];
+  results: Record<string, Record<string, number>>;
+  best_model: {
+    model_name: string;
+    reason: string;
+    confidence: number;
+  };
+  created_at: string;
+}
+
+export interface AutoMLModelRequest {
+  dataset_id: string;
+  target_column: string;
+  task_type: 'classification' | 'regression' | 'clustering';
+  models: string[];
+  test_size?: number;
+  random_state?: number;
+}
+
+export async function uploadAutoMLDataset(file: File): Promise<AutoMLDataset> {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const response = await fetch(API_ENDPOINTS.AUTOML_DATASET_UPLOAD, {
+    method: 'POST',
+    body: formData,
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to upload dataset');
+  }
+  
+  return response.json();
+}
+
+export async function listAutoMLDatasets(): Promise<{ datasets: AutoMLDataset[] }> {
+  const response = await fetch(API_ENDPOINTS.AUTOML_DATASETS);
+  return response.json();
+}
+
+export async function getAutoMLDataset(datasetId: string): Promise<AutoMLDataset> {
+  const response = await fetch(`${API_BASE}/api/automl/datasets/${datasetId}`);
+  return response.json();
+}
+
+export async function runAutoMLExperiment(request: AutoMLModelRequest): Promise<AutoMLExperiment> {
+  const response = await fetch(API_ENDPOINTS.AUTOML_EXPERIMENTS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to run experiment');
+  }
+  
+  return response.json();
+}
+
+export async function getAutoMLExperiment(experimentId: string): Promise<AutoMLExperiment> {
+  const response = await fetch(`${API_BASE}/api/automl/experiments/${experimentId}`);
+  return response.json();
+}
+
+export async function listAutoMLExperiments(): Promise<{ experiments: AutoMLExperiment[] }> {
+  const response = await fetch(API_ENDPOINTS.AUTOML_EXPERIMENTS);
+  return response.json();
+}
+
+export async function compareAutoMLModels(experimentId: string) {
+  const response = await fetch(API_ENDPOINTS.AUTOML_COMPARE(experimentId), {
+    method: 'POST',
+  });
+  return response.json();
+}
+
+export async function getAvailableModels() {
+  const response = await fetch(API_ENDPOINTS.AUTOML_MODELS_AVAILABLE);
+  return response.json();
+}
+
+export async function deployAutoMLModel(modelId: string) {
+  const response = await fetch(API_ENDPOINTS.AUTOML_DEPLOY(modelId), {
+    method: 'POST',
+  });
+  return response.json();
+}
+
+export async function listAutoMLDeployments() {
+  const response = await fetch(API_ENDPOINTS.AUTOML_DEPLOYMENTS);
+  return response.json();
+}
+
+export async function predictAutoML(deploymentId: string, features: Record<string, unknown>) {
+  const response = await fetch(API_ENDPOINTS.AUTOML_PREDICT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deployment_id: deploymentId, features }),
+  });
+  return response.json();
+}
+
+export async function generateAutoMLReport(experimentId: string, format: string = 'html') {
+  const response = await fetch(API_ENDPOINTS.AUTOML_REPORTS(experimentId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ format }),
+  });
   return response.json();
 }
 
