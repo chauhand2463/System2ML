@@ -63,6 +63,7 @@ function SidebarComponent() {
   const mainMenu = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, color: 'text-blue-400' },
     { label: 'AutoML Lab', href: '/automl', icon: Sparkles, color: 'text-purple-400' },
+    { label: 'Autonomous', href: '/autonomous', icon: Cpu, color: 'text-orange-400' },
     { label: 'Pipelines', href: '/pipelines', icon: Zap, color: 'text-brand-400' },
     { label: 'Runs', href: '/runs', icon: Activity, color: 'text-emerald-400' },
     { label: 'Failures', href: '/failures', icon: AlertCircle, color: 'text-red-400' },

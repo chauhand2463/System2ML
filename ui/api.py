@@ -108,6 +108,24 @@ try:
 except ImportError as e:
     logger.warning(f"AutoML service not available: {e}")
 
+# Include Vibe ML router
+try:
+    from vibe_ml_api.routes import router as vibe_ml_router
+
+    app.include_router(vibe_ml_router)
+    logger.info("Vibe ML service registered")
+except ImportError as e:
+    logger.warning(f"Vibe ML service not available: {e}")
+
+# Include Autonomous Platform router
+try:
+    from autonomous_platform_api.routes import router as autonomous_router
+
+    app.include_router(autonomous_router)
+    logger.info("Autonomous Platform service registered")
+except ImportError as e:
+    logger.warning(f"Autonomous Platform service not available: {e}")
+
 
 @app.on_event("startup")
 async def startup_event():
